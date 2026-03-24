@@ -141,7 +141,7 @@ export const api = {
     } satisfies DashboardBoard;
   },
   getHistoryDashboard: async (filters?: TaskFilters) => {
-    const response = await request<any>(`/api/dashboard/history${toSearchParams(filters)}`);
+    const response = await request<any>(`/api/history${toSearchParams(filters)}`);
     return {
       items: Array.isArray(response.tasks) ? response.tasks.map(normalizeTask) : [],
       total: Number(response.total || 0),
@@ -149,6 +149,21 @@ export const api = {
   },
   getTask: async (id: number) => normalizeTask(await request<any>(`/api/tasks/${id}`)),
   getTasks: async (filters?: TaskFilters) => (await request<any[]>(`/api/tasks${toSearchParams(filters)}`)).map(normalizeTask),
+  createTask: async (payload: UpdateTaskPayload & { title: string }) =>
+    normalizeTask(
+      await request<any>(`/api/tasks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          title: payload.title,
+          description: payload.description ?? null,
+          due_at: payload.due_at ?? null,
+          project: payload.project ?? null,
+          tags: payload.tags ?? [],
+          source: 'web',
+          reminders: [],
+        }),
+      }),
+    ),
   getProjects: async () => {
     const response = await request<any[]>('/api/projects');
     return (
