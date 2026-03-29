@@ -1,4 +1,4 @@
-import { PlanGroup, Task, TaskStatus } from './types';
+import { PlanGroup, Task, TaskRecurrence, TaskStatus } from './types';
 
 export const statusLabelMap: Record<TaskStatus, string> = {
   todo: '待办',
@@ -6,6 +6,16 @@ export const statusLabelMap: Record<TaskStatus, string> = {
   deferred: '已延期',
   done: '已完成',
   canceled: '已取消',
+};
+
+const weekdayLabelMap: Record<number, string> = {
+  1: '周一',
+  2: '周二',
+  3: '周三',
+  4: '周四',
+  5: '周五',
+  6: '周六',
+  7: '周日',
 };
 
 export function formatDateTime(value?: string | null) {
@@ -115,4 +125,35 @@ export function groupTasksByProject(tasks: Task[]) {
       title,
       tasks: sortTasksByDue(list),
     }));
+}
+
+export function normalizeWeekdays(values?: number[]) {
+  return Array.from(new Set((values || []).map((item) => Number(item)).filter((item) => item >= 1 && item <= 7))).sort((a, b) => a - b);
+}
+
+export function describeRecurrence(recurrence?: TaskRecurrence | null) {
+  if (!recurrence?.enabled) return '单次提醒';
+
+  const interval = Math.max(1, Number(recurrence.interval || 1));
+  const unit = recurrence.frequency;
+
+  if (unit === 'daily') return interval === 1 ? '每天' : `每 ${interval} 天`;
+  if (unit === 'weekly') {
+    const days = normalizeWeekdays(recurrence.days_of_week);
+    const dayText = days.length ? days.map((day) => weekdayLabelMap[day]).join('、') : '每周';
+    return interval === 1 ? dayText : `每 ${interval} 周 · ${dayText}`;
+  }
+  if (unit === 'monthly') {
+    const day = recurrence.day_of_month || recurrence.start_at?.slice(8, 10);
+    return interval === 1 ? `每月 ${day || ''} 号`.trim() : `每 ${interval} 月 ${day || ''} 号`.trim();
+  }
+  return `每 ${interval} ${unit}`;
+}
+
+export function describeRecurrenceMeta(recurrence?: TaskRecurrence | null) {
+  if (!recurrence?.enabled) return '';
+  const parts = [describeRecurrence(recurrence)];
+  if (recurrence.end_at) parts.push(`截止 ${formatDateLabel(recurrence.end_at)}`);
+  if (recurrence.next_run_at) parts.push(`下次 ${formatDateTime(recurrence.next_run_at)}`);
+  return parts.join(' · ');
 }

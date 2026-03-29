@@ -1,5 +1,17 @@
 import { API_BASE_URL } from './config';
-import { DashboardBoard, DashboardToday, DeferTaskPayload, HistoryResponse, ProjectSummary, Task, TaskEvent, TaskFilters, TaskStatus, UpdateTaskPayload } from './types';
+import {
+  DashboardBoard,
+  DashboardToday,
+  DeferTaskPayload,
+  HistoryResponse,
+  ProjectSummary,
+  Task,
+  TaskEvent,
+  TaskFilters,
+  TaskRecurrence,
+  TaskStatus,
+  UpdateTaskPayload,
+} from './types';
 
 const boardTitles: Record<TaskStatus, string> = {
   todo: '待办',
@@ -75,6 +87,44 @@ function normalizeEvent(event: Partial<TaskEvent> & { payload?: Record<string, u
   };
 }
 
+function toNumberArray(value: unknown) {
+  return Array.isArray(value)
+    ? value
+        .map((item) => Number(item))
+        .filter((item, index, list) => Number.isFinite(item) && list.indexOf(item) === index)
+        .sort((a, b) => a - b)
+    : [];
+}
+
+function normalizeRecurrence(raw: any): TaskRecurrence | null {
+  const source = raw?.recurrence ?? raw?.recurrence_rule ?? raw?.repeat_rule ?? raw?.repeat ?? raw?.schedule ?? null;
+  if (!source || typeof source !== 'object') return null;
+
+  const enabled = source.enabled !== false;
+  const rawFrequency = String(source.frequency || source.freq || source.unit || 'weekly').toLowerCase();
+  const frequency = rawFrequency === 'day' ? 'daily' : rawFrequency === 'week' ? 'weekly' : rawFrequency === 'month' ? 'monthly' : rawFrequency;
+  const interval = Math.max(1, Number(source.interval || source.every || 1) || 1);
+  const daysOfWeek = toNumberArray(source.days_of_week ?? source.weekdays ?? source.week_days ?? source.byweekday);
+  const dayOfMonthRaw = source.day_of_month ?? source.month_day ?? source.monthDay ?? source.bymonthday;
+  const dayOfMonth = dayOfMonthRaw == null ? null : Number(dayOfMonthRaw);
+  const reminderOffsets = toNumberArray(source.reminder_offsets_minutes ?? source.reminder_offset_minutes);
+
+  return {
+    enabled,
+    frequency,
+    interval,
+    days_of_week: daysOfWeek,
+    day_of_month: Number.isFinite(dayOfMonth) ? dayOfMonth : null,
+    end_at: source.end_at ?? source.until ?? source.ends_at ?? null,
+    timezone: source.timezone ?? source.tz ?? null,
+    time_of_day: source.time_of_day ?? source.timeOfDay ?? source.time ?? null,
+    start_at: source.start_at ?? source.anchor_at ?? source.starts_at ?? raw?.due_at ?? null,
+    next_run_at: source.next_run_at ?? source.next_due_at ?? null,
+    last_run_at: source.last_run_at ?? null,
+    reminder_offsets_minutes: reminderOffsets,
+  };
+}
+
 function normalizeTask(task: any): Task {
   return {
     id: Number(task.id),
@@ -93,7 +143,24 @@ function normalizeTask(task: any): Task {
     reminders: Array.isArray(task.reminders)
       ? task.reminders.map((reminder: any) => ({ ...reminder, id: Number(reminder.id), task_id: Number(reminder.task_id) }))
       : [],
+    recurrence: normalizeRecurrence(task),
     events: Array.isArray(task.events) ? task.events.map(normalizeEvent) : [],
+  };
+}
+
+function serializeRecurrencePayload(recurrence?: TaskRecurrence | null) {
+  if (!recurrence) return null;
+  return {
+    enabled: recurrence.enabled,
+    frequency: recurrence.frequency,
+    interval: Math.max(1, Number(recurrence.interval || 1) || 1),
+    timezone: recurrence.timezone ?? 'Asia/Shanghai',
+    time_of_day: recurrence.time_of_day ?? null,
+    days_of_week: toNumberArray(recurrence.days_of_week),
+    day_of_month: recurrence.day_of_month ?? null,
+    start_at: recurrence.start_at ?? null,
+    end_at: recurrence.end_at ?? null,
+    reminder_offsets_minutes: toNumberArray(recurrence.reminder_offsets_minutes),
   };
 }
 
@@ -161,6 +228,7 @@ export const api = {
           tags: payload.tags ?? [],
           source: 'web',
           reminders: [],
+          recurrence: serializeRecurrencePayload(payload.recurrence),
         }),
       }),
     ),
@@ -181,7 +249,10 @@ export const api = {
     normalizeTask(
       await request<any>(`/api/tasks/${id}`, {
         method: 'PATCH',
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...payload,
+          recurrence: serializeRecurrencePayload(payload.recurrence),
+        }),
       }),
     ),
   completeTask: async (id: number) =>

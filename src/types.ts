@@ -1,5 +1,6 @@
 export type TaskStatus = 'todo' | 'doing' | 'done' | 'deferred' | 'canceled';
 export type TaskSource = 'chat' | 'web' | 'system' | 'seed' | string;
+export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | string;
 
 export interface Reminder {
   id: number;
@@ -10,6 +11,21 @@ export interface Reminder {
   note?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskRecurrence {
+  enabled: boolean;
+  frequency: RecurrenceFrequency;
+  interval: number;
+  days_of_week?: number[];
+  day_of_month?: number | null;
+  end_at?: string | null;
+  timezone?: string | null;
+  time_of_day?: string | null;
+  start_at?: string | null;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  reminder_offsets_minutes?: number[];
 }
 
 export interface TaskEvent {
@@ -35,6 +51,7 @@ export interface Task {
   canceled_at?: string | null;
   deferred_to?: string | null;
   reminders?: Reminder[];
+  recurrence?: TaskRecurrence | null;
   events?: TaskEvent[];
 }
 
@@ -94,6 +111,7 @@ export interface UpdateTaskPayload {
   status?: TaskStatus;
   project?: string | null;
   tags?: string[];
+  recurrence?: TaskRecurrence | null;
 }
 
 export interface DeferTaskPayload {

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import { useAsyncData } from './hooks';
-import { DashboardBoardGroup, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskStatus, UpdateTaskPayload } from './types';
-import { fallbackPlanGroups, formatDateLabel, formatDateTime, groupTasksByProject, groupTodayTasks, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
+import { DashboardBoardGroup, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
+import { describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
 type BoardMode = 'status' | 'project';
@@ -21,6 +21,12 @@ interface TaskFormState {
   project: string;
   description: string;
   status: TaskStatus;
+  recurrence_enabled: boolean;
+  recurrence_frequency: 'daily' | 'weekly' | 'monthly';
+  recurrence_interval: string;
+  recurrence_weekdays: number[];
+  recurrence_month_day: string;
+  recurrence_until: string;
 }
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
@@ -39,6 +45,22 @@ const boardTitles: Record<TaskStatus, string> = {
   done: '已完成',
   canceled: '已取消',
 };
+
+const recurrenceFrequencyOptions: Array<{ value: 'daily' | 'weekly' | 'monthly'; label: string }> = [
+  { value: 'daily', label: '每天 / 每 N 天' },
+  { value: 'weekly', label: '每周 / 指定星期' },
+  { value: 'monthly', label: '每月' },
+];
+
+const weekdayOptions = [
+  { value: 1, label: '一' },
+  { value: 2, label: '二' },
+  { value: 3, label: '三' },
+  { value: 4, label: '四' },
+  { value: 5, label: '五' },
+  { value: 6, label: '六' },
+  { value: 7, label: '日' },
+];
 
 function formatDateTimeInput(value?: string | null) {
   if (!value) return '';
@@ -61,12 +83,47 @@ function getTaskScheduleAt(task?: Task | null) {
 }
 
 function makeTaskFormState(task?: Task | null): TaskFormState {
+  const recurrence = task?.recurrence;
+  const frequency = recurrence?.frequency === 'daily' || recurrence?.frequency === 'weekly' || recurrence?.frequency === 'monthly' ? recurrence.frequency : 'weekly';
   return {
     title: task?.title || '',
     due_at: formatDateTimeInput(getTaskScheduleAt(task || undefined)),
     project: task?.project || '',
     description: task?.description || '',
     status: task?.status || 'todo',
+    recurrence_enabled: Boolean(recurrence?.enabled),
+    recurrence_frequency: frequency,
+    recurrence_interval: String(Math.max(1, Number(recurrence?.interval || 1) || 1)),
+    recurrence_weekdays: normalizeWeekdays(recurrence?.days_of_week),
+    recurrence_month_day: recurrence?.day_of_month ? String(recurrence.day_of_month) : '',
+    recurrence_until: formatDateTimeInput(recurrence?.end_at || ''),
+  };
+}
+
+function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): TaskRecurrence | null {
+  if (!draft.recurrence_enabled || !dueAt) return null;
+
+  const interval = Math.max(1, Number(draft.recurrence_interval || 1) || 1);
+  const dueDate = new Date(dueAt);
+  const daysOfWeek = draft.recurrence_frequency === 'weekly'
+    ? normalizeWeekdays(draft.recurrence_weekdays.length ? draft.recurrence_weekdays : [((dueDate.getUTCDay() + 6) % 7) + 1])
+    : [];
+  const dayOfMonth = draft.recurrence_frequency === 'monthly'
+    ? Math.min(31, Math.max(1, Number(draft.recurrence_month_day || dueDate.getUTCDate()) || 1))
+    : null;
+  const hours = String(dueDate.getHours()).padStart(2, '0');
+  const minutes = String(dueDate.getMinutes()).padStart(2, '0');
+
+  return {
+    enabled: true,
+    frequency: draft.recurrence_frequency,
+    interval,
+    days_of_week: daysOfWeek,
+    day_of_month: dayOfMonth,
+    end_at: toIsoOrNull(draft.recurrence_until),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    time_of_day: `${hours}:${minutes}:00`,
+    start_at: dueAt,
   };
 }
 
@@ -292,12 +349,19 @@ function App() {
       return;
     }
 
+    const dueAt = toIsoOrNull(editorDraft.due_at);
+    if (editorDraft.recurrence_enabled && !dueAt) {
+      setToast({ text: '周期性提醒需要先设置首个提醒时间', tone: 'danger' });
+      return;
+    }
+
     const basePayload: UpdateTaskPayload = {
       title,
       description: editorDraft.description.trim() || null,
-      due_at: toIsoOrNull(editorDraft.due_at),
+      due_at: dueAt,
       project: editorDraft.project.trim() || null,
       status: editorDraft.status,
+      recurrence: buildRecurrencePayload(editorDraft, dueAt),
     };
 
     setActionBusy(editorMode === 'create' ? 'create' : 'edit');
@@ -630,6 +694,7 @@ function TaskRow({ task, onClick, showUpdated = false }: { task: Task; onClick: 
           <StatusPill status={task.status} />
           <span>{formatDateTime(getTaskScheduleAt(task))}</span>
           {task.project && <span>{task.project}</span>}
+          {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
         </div>
         {task.description && <div className="task-desc">{task.description}</div>}
       </div>
@@ -677,7 +742,10 @@ function TaskDetailSheet({
               <DetailItem label="时间" value={formatDateTime(getTaskScheduleAt(task))} />
               <DetailItem label="项目" value={task.project || '未分项目'} />
               <DetailItem label="更新" value={formatDateTime(task.updated_at)} />
+              <DetailItem label="周期" value={task.recurrence?.enabled ? describeRecurrence(task.recurrence) : '单次提醒'} />
+              <DetailItem label="下次执行" value={task.recurrence?.next_run_at ? formatDateTime(task.recurrence.next_run_at) : formatDateTime(getTaskScheduleAt(task))} />
             </div>
+            {task.recurrence?.enabled && <div className="helper-text recurrence-helper">{describeRecurrenceMeta(task.recurrence)}</div>}
             <div className="detail-text">
               <div className="detail-label">描述</div>
               <p>{task.description || '暂无描述'}</p>
@@ -786,7 +854,7 @@ function TaskEditorSheet({
             关闭
           </button>
           <strong>{mode === 'create' ? '创建任务' : '编辑任务'}</strong>
-          <span className="muted-text">基础表单已接通</span>
+          <span className="muted-text">sheet 表单，专心把事定清楚</span>
         </div>
         <div className="filter-form">
           <label>
@@ -794,7 +862,7 @@ function TaskEditorSheet({
             <input value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} placeholder="任务标题" />
           </label>
           <label>
-            <span>时间</span>
+            <span>首次提醒时间</span>
             <input type="datetime-local" value={draft.due_at} onChange={(event) => onChange({ ...draft, due_at: event.target.value })} />
           </label>
           <label>
@@ -811,6 +879,93 @@ function TaskEditorSheet({
               <option value="canceled">已取消</option>
             </select>
           </label>
+
+          <div className="subcard recurrence-card">
+            <div className="sheet-toggle-row">
+              <div>
+                <div className="detail-label">周期性提醒</div>
+                <strong>{draft.recurrence_enabled ? describeRecurrence(buildRecurrencePayload(draft, toIsoOrNull(draft.due_at))) : '单次提醒'}</strong>
+              </div>
+              <button
+                type="button"
+                className={draft.recurrence_enabled ? 'mini-toggle mini-toggle-active' : 'mini-toggle'}
+                onClick={() => onChange({ ...draft, recurrence_enabled: !draft.recurrence_enabled })}
+              >
+                {draft.recurrence_enabled ? '已开启' : '未开启'}
+              </button>
+            </div>
+
+            {draft.recurrence_enabled && (
+              <div className="recurrence-form">
+                <label>
+                  <span>重复频率</span>
+                  <select value={draft.recurrence_frequency} onChange={(event) => onChange({ ...draft, recurrence_frequency: event.target.value as TaskFormState['recurrence_frequency'] })}>
+                    {recurrenceFrequencyOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>间隔</span>
+                  <input
+                    inputMode="numeric"
+                    value={draft.recurrence_interval}
+                    onChange={(event) => onChange({ ...draft, recurrence_interval: event.target.value.replace(/[^0-9]/g, '') || '1' })}
+                    placeholder="1"
+                  />
+                </label>
+
+                {draft.recurrence_frequency === 'weekly' && (
+                  <div>
+                    <div className="detail-label">每周这些天</div>
+                    <div className="option-chip-grid">
+                      {weekdayOptions.map((option) => {
+                        const active = draft.recurrence_weekdays.includes(option.value);
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={active ? 'chip chip-active' : 'chip'}
+                            onClick={() =>
+                              onChange({
+                                ...draft,
+                                recurrence_weekdays: active
+                                  ? draft.recurrence_weekdays.filter((item) => item !== option.value)
+                                  : normalizeWeekdays([...draft.recurrence_weekdays, option.value]),
+                              })
+                            }
+                          >
+                            周{option.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {draft.recurrence_frequency === 'monthly' && (
+                  <label>
+                    <span>每月几号</span>
+                    <input
+                      inputMode="numeric"
+                      value={draft.recurrence_month_day}
+                      onChange={(event) => onChange({ ...draft, recurrence_month_day: event.target.value.replace(/[^0-9]/g, '').slice(0, 2) })}
+                      placeholder="例如 15"
+                    />
+                  </label>
+                )}
+
+                <label>
+                  <span>结束时间（可选）</span>
+                  <input type="datetime-local" value={draft.recurrence_until} onChange={(event) => onChange({ ...draft, recurrence_until: event.target.value })} />
+                </label>
+                <div className="helper-text">当前实现里，首次提醒时间同时作为周期锚点。后端一旦接住，就不会再靠人脑补班了。</div>
+              </div>
+            )}
+          </div>
+
           <label>
             <span>描述</span>
             <textarea rows={5} value={draft.description} onChange={(event) => onChange({ ...draft, description: event.target.value })} placeholder="补充一点上下文，未来的你会感谢现在的你。" />

@@ -435,6 +435,69 @@ button {
   min-height: 110px;
 }
 
+.inline-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand);
+  font-weight: 700;
+}
+
+.subcard {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  padding: 14px;
+}
+
+.recurrence-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sheet-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mini-toggle {
+  flex-shrink: 0;
+  min-width: 72px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #f8f9fc;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.mini-toggle-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+.recurrence-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.option-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.recurrence-helper {
+  padding-top: 10px;
+}
+
 .state-card,
 .empty-hint {
   padding: 16px;
