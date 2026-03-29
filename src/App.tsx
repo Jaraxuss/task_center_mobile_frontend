@@ -459,6 +459,7 @@ function App() {
                 setEditorMode('create');
               }}
               onOpenPlan={() => setActiveTab('plan')}
+              onOpenTask={openTask}
             />
             {today.loading && !today.loaded && <StateCard text="正在加载今日任务…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
@@ -662,17 +663,25 @@ function TodayHero({
   groups,
   onCreateTask,
   onOpenPlan,
+  onOpenTask,
 }: {
   summary?: DashboardToday['summary'];
   groups: ReturnType<typeof groupTodayTasks>;
   onCreateTask: () => void;
   onOpenPlan: () => void;
+  onOpenTask: (task: Task) => void;
 }) {
   const overdueCount = groups.overdue.length;
   const dueTodayCount = groups.dueToday.length;
   const doingCount = groups.doing.length;
   const laterCount = groups.later.length;
   const openCount = summary?.open ?? overdueCount + dueTodayCount + doingCount + laterCount;
+  const primaryTask = groups.overdue[0] || groups.dueToday[0] || groups.doing[0] || groups.later[0] || null;
+  const queueText = [
+    overdueCount > 0 ? `${overdueCount} 项逾期` : null,
+    dueTodayCount > 0 ? `${dueTodayCount} 项今天到期` : null,
+    doingCount > 0 ? `${doingCount} 项进行中` : null,
+  ].filter(Boolean).join(' · ');
 
   const heroCopy = overdueCount > 0
     ? {
@@ -707,9 +716,11 @@ function TodayHero({
   return (
     <section className="today-hero card-section accent-brand-soft">
       <div className="today-hero-main">
-        <span className="topbar-kicker">{heroCopy.kicker}</span>
-        <h2>{heroCopy.title}</h2>
-        <p>{heroCopy.description}</p>
+        <div className="today-hero-heading">
+          <span className="topbar-kicker today-hero-kicker">{heroCopy.kicker}</span>
+          <h2>{heroCopy.title}</h2>
+          <p>{heroCopy.description}</p>
+        </div>
         <div className="today-hero-actions">
           <button type="button" className="hero-primary-button" onClick={onCreateTask}>
             新建任务
@@ -719,24 +730,52 @@ function TodayHero({
           </button>
         </div>
       </div>
-      <div className="today-stat-grid">
-        <div className="today-stat-card today-stat-card-danger">
-          <span>逾期</span>
+
+      <div className="today-priority-strip" aria-label="今日重点信息">
+        <span className={overdueCount > 0 ? 'today-priority-chip today-priority-chip-danger' : 'today-priority-chip'}>
+          <span className="today-priority-chip-label">逾期</span>
           <strong>{overdueCount}</strong>
-        </div>
-        <div className="today-stat-card today-stat-card-warning">
-          <span>今天到期</span>
+        </span>
+        <span className={dueTodayCount > 0 ? 'today-priority-chip today-priority-chip-warning' : 'today-priority-chip'}>
+          <span className="today-priority-chip-label">今天到期</span>
           <strong>{dueTodayCount}</strong>
-        </div>
-        <div className="today-stat-card">
-          <span>进行中</span>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">进行中</span>
           <strong>{doingCount}</strong>
-        </div>
-        <div className="today-stat-card">
-          <span>待处理总数</span>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">待处理</span>
           <strong>{openCount}</strong>
-        </div>
+        </span>
       </div>
+
+      {primaryTask ? (
+        <button type="button" className="today-focus-card" onClick={() => onOpenTask(primaryTask)}>
+          <div className="today-focus-topline">
+            <span className="today-focus-label">当前焦点</span>
+            <span className="today-focus-queue">{queueText || '先从这件事开始'}</span>
+          </div>
+          <div className="today-focus-body">
+            <div className="today-focus-title-wrap">
+              <div className="today-focus-title">{primaryTask.title}</div>
+              <span className="today-focus-arrow">↗</span>
+            </div>
+            <div className="today-focus-meta">
+              <StatusPill status={primaryTask.status} />
+              <span>{formatDateTime(getTaskScheduleAt(primaryTask))}</span>
+              {primaryTask.project && <span>{primaryTask.project}</span>}
+            </div>
+            {primaryTask.description && <p className="today-focus-desc">{primaryTask.description}</p>}
+          </div>
+        </button>
+      ) : (
+        <div className="today-focus-empty">
+          <span className="today-focus-label">当前焦点</span>
+          <strong>今天没有堆在眼前的急事。</strong>
+          <p>如果突然想到新任务，可以直接新建；如果只是想回看安排，去计划页更合适。</p>
+        </div>
+      )}
     </section>
   );
 }
