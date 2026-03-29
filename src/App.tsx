@@ -451,16 +451,27 @@ function App() {
       <main className="content">
         {activeTab === 'today' && (
           <section className="page">
-            <SummaryStrip summary={summary} />
+            <TodayHero
+              summary={summary}
+              groups={todayGroups}
+              onCreateTask={() => {
+                setEditorDraft(makeTaskFormState());
+                setEditorMode('create');
+              }}
+              onOpenPlan={() => setActiveTab('plan')}
+            />
             {today.loading && !today.loaded && <StateCard text="正在加载今日任务…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && (
               <>
-                <TaskGroupSection title="逾期" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} />
-                <TaskGroupSection title="今天到期" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} />
-                <TaskGroupSection title="进行中" tasks={todayGroups.doing} accent="brand" onOpenTask={openTask} />
-                <TaskGroupSection title="稍后 / 无具体时间" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} />
-                <TaskGroupSection title="已完成" tasks={todayGroups.completed} accent="success" defaultCollapsed onOpenTask={openTask} />
+                {todayGroups.overdue.length === 0 && todayGroups.dueToday.length === 0 && todayGroups.doing.length === 0 && todayGroups.later.length === 0 && (
+                  <StateCard text="今天暂时没有待处理任务，节奏还算稳。" />
+                )}
+                <TaskGroupSection title="先处理" description="已经逾期，先止血再继续排今天的活。" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} hideWhenEmpty />
+                <TaskGroupSection title="今天要收口" description="今天到期的事，优先别拖到明天。" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} hideWhenEmpty />
+                <TaskGroupSection title="正在推进" description="已经开工的任务，适合趁手往前推。" tasks={todayGroups.doing} accent="brand" onOpenTask={openTask} hideWhenEmpty />
+                <TaskGroupSection title="稍后处理" description="没有卡在当下，但也别让它们消失。" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} hideWhenEmpty />
+                <TaskGroupSection title="已完成" description="今天已经收口的事项，默认折叠。" tasks={todayGroups.completed} accent="success" defaultCollapsed onOpenTask={openTask} hideWhenEmpty />
               </>
             )}
           </section>
@@ -468,11 +479,14 @@ function App() {
 
         {activeTab === 'plan' && (
           <section className="page">
-            <SummaryStrip summary={summary} compact />
+            <PlanHero groups={planGroups} onCreateTask={() => {
+              setEditorDraft(makeTaskFormState());
+              setEditorMode('create');
+            }} />
             {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
-            {!today.loading && !today.error && planGroups.map((group: PlanGroup) => <PlanDaySection key={group.key} group={group} onOpenTask={openTask} />)}
+            {!today.loading && !today.error && planGroups.map((group: PlanGroup, index: number) => <PlanDaySection key={group.key} group={group} onOpenTask={openTask} index={index} />)}
           </section>
         )}
 
@@ -498,19 +512,35 @@ function App() {
 
         {activeTab === 'history' && (
           <section className="page">
-            <div className="section-heading">
-              <div>
-                <strong>最近更新</strong>
-                <span>{history.data?.total || historyItems.length} 项</span>
-              </div>
-              <button type="button" className="ghost-button" onClick={() => setShowHistoryFilter(true)}>
-                筛选
-              </button>
-            </div>
+            <HistoryHero
+              items={historyItems}
+              filters={historyFilters}
+              onOpenFilter={() => setShowHistoryFilter(true)}
+              onResetFilters={() => {
+                const next = { q: '', status: '', date: '' };
+                setHistoryDraft(next);
+                setHistoryFilters(next);
+              }}
+            />
             {history.loading && !history.loaded && <StateCard text="历史记录加载中…" />}
             {history.error && <StateCard text={history.error} tone="danger" />}
             {!history.loading && !history.error && history.loaded && historyItems.length === 0 && <StateCard text="没有符合条件的历史记录" />}
-            {!history.loading && !history.error && historyItems.map((task) => <TaskRow key={task.id} task={task} onClick={() => openTask(task)} showUpdated />)}
+            {!history.loading && !history.error && history.loaded && historyItems.length > 0 && (
+              <section className="card-section accent-muted">
+                <div className="section-heading">
+                  <div className="section-heading-copy">
+                    <strong>最近更新</strong>
+                    <span>按最近更新时间倒序，方便快速回看刚动过的事。</span>
+                  </div>
+                  <div className="section-heading-side">
+                    <span className="section-count-badge">{history.data?.total || historyItems.length} 项</span>
+                  </div>
+                </div>
+                <div className="task-list">
+                  {historyItems.map((task) => <TaskRow key={task.id} task={task} onClick={() => openTask(task)} showUpdated />)}
+                </div>
+              </section>
+            )}
           </section>
         )}
       </main>
@@ -627,18 +657,106 @@ function SummaryStrip({ summary, compact = false }: { summary?: DashboardToday['
   );
 }
 
+function TodayHero({
+  summary,
+  groups,
+  onCreateTask,
+  onOpenPlan,
+}: {
+  summary?: DashboardToday['summary'];
+  groups: ReturnType<typeof groupTodayTasks>;
+  onCreateTask: () => void;
+  onOpenPlan: () => void;
+}) {
+  const overdueCount = groups.overdue.length;
+  const dueTodayCount = groups.dueToday.length;
+  const doingCount = groups.doing.length;
+  const laterCount = groups.later.length;
+  const openCount = summary?.open ?? overdueCount + dueTodayCount + doingCount + laterCount;
+
+  const heroCopy = overdueCount > 0
+    ? {
+        kicker: '先处理风险项',
+        title: `${overdueCount} 项逾期任务待收口`,
+        description: '先把已经拖住节奏的事处理掉，再看今天新增，不然后面的安排都会被带偏。',
+      }
+    : dueTodayCount > 0
+      ? {
+          kicker: '今天优先级',
+          title: `今天还有 ${dueTodayCount} 项要收口`,
+          description: '今天到期的任务已经浮上来了，优先清掉，别让明天先背债。',
+        }
+      : doingCount > 0
+        ? {
+            kicker: '继续推进',
+            title: `手上有 ${doingCount} 项正在推进`,
+            description: '今天没有明显爆点，适合把手上的事往前推一截。',
+          }
+        : openCount > 0
+          ? {
+              kicker: '今天节奏',
+              title: `当前还有 ${openCount} 项待处理`,
+              description: '没有特别紧急的阻塞项，适合按顺序稳稳推进。',
+            }
+          : {
+              kicker: '今天很干净',
+              title: '目前没有待处理任务',
+              description: '如果突然想到新任务，现在就是最适合补进去的时候。',
+            };
+
+  return (
+    <section className="today-hero card-section accent-brand-soft">
+      <div className="today-hero-main">
+        <span className="topbar-kicker">{heroCopy.kicker}</span>
+        <h2>{heroCopy.title}</h2>
+        <p>{heroCopy.description}</p>
+        <div className="today-hero-actions">
+          <button type="button" className="hero-primary-button" onClick={onCreateTask}>
+            新建任务
+          </button>
+          <button type="button" className="hero-secondary-button" onClick={onOpenPlan}>
+            看计划
+          </button>
+        </div>
+      </div>
+      <div className="today-stat-grid">
+        <div className="today-stat-card today-stat-card-danger">
+          <span>逾期</span>
+          <strong>{overdueCount}</strong>
+        </div>
+        <div className="today-stat-card today-stat-card-warning">
+          <span>今天到期</span>
+          <strong>{dueTodayCount}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>进行中</span>
+          <strong>{doingCount}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>待处理总数</span>
+          <strong>{openCount}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function TaskGroupSection({
   title,
+  description,
   tasks,
   onOpenTask,
   accent,
   defaultCollapsed = false,
+  hideWhenEmpty = false,
 }: {
   title: string;
+  description?: string;
   tasks: Task[];
   onOpenTask: (task: Task) => void;
   accent: 'danger' | 'warning' | 'brand' | 'muted' | 'success' | 'board';
   defaultCollapsed?: boolean;
+  hideWhenEmpty?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -646,14 +764,19 @@ function TaskGroupSection({
     if (!defaultCollapsed) setCollapsed(false);
   }, [defaultCollapsed]);
 
+  if (hideWhenEmpty && tasks.length === 0) return null;
+
   return (
     <section className={`card-section accent-${accent}`}>
       <button type="button" className="section-heading collapsible-heading" onClick={() => setCollapsed((prev) => !prev)}>
-        <div>
+        <div className="section-heading-copy">
           <strong>{title}</strong>
-          <span>{tasks.length} 项</span>
+          {description ? <span>{description}</span> : <span>{tasks.length} 项</span>}
         </div>
-        <span>{collapsed ? '+' : '−'}</span>
+        <div className="section-heading-side">
+          <span className="section-count-badge">{tasks.length} 项</span>
+          <span className="section-toggle-icon">{collapsed ? '+' : '−'}</span>
+        </div>
       </button>
       {!collapsed && (
         <div className="task-list">
@@ -664,17 +787,130 @@ function TaskGroupSection({
   );
 }
 
-function PlanDaySection({ group, onOpenTask }: { group: PlanGroup; onOpenTask: (task: Task) => void }) {
+function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask: () => void }) {
+  const datedGroups = groups.filter((group) => group.group_date);
+  const nextGroup = datedGroups[0];
+  const plannedCount = groups.reduce((sum, group) => sum + group.tasks.length, 0);
+  const unscheduledCount = groups.find((group) => group.key === 'unscheduled')?.tasks.length || 0;
+  const nextCount = nextGroup?.tasks.length || 0;
+
   return (
-    <section className="card-section agenda-section">
+    <section className="module-hero card-section accent-brand-soft">
+      <div className="module-hero-main">
+        <span className="topbar-kicker">计划视图</span>
+        <h2>{nextGroup ? `下一组安排在 ${nextGroup.title}` : '计划已经排得很空'}</h2>
+        <p>
+          {nextGroup
+            ? `先看最近日期，再决定今天之外的事要不要提前处理。未排期的任务会单独收口，不和日程混在一起。`
+            : '当前没有按日期排好的计划任务，如果临时想到事，可以直接新建再补时间。'}
+        </p>
+        <div className="today-hero-actions">
+          <button type="button" className="hero-primary-button" onClick={onCreateTask}>
+            新建任务
+          </button>
+        </div>
+      </div>
+      <div className="today-stat-grid">
+        <div className="today-stat-card">
+          <span>计划总数</span>
+          <strong>{plannedCount}</strong>
+        </div>
+        <div className="today-stat-card today-stat-card-warning">
+          <span>最近日期任务</span>
+          <strong>{nextCount}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>未排期</span>
+          <strong>{unscheduledCount}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>日期组</span>
+          <strong>{datedGroups.length}</strong>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function PlanDaySection({ group, onOpenTask, index = 0 }: { group: PlanGroup; onOpenTask: (task: Task) => void; index?: number }) {
+  const description = group.group_date
+    ? index === 0
+      ? '离现在最近的一组，优先看这里。'
+      : '按日期顺序排布，适合提前看后面的安排。'
+    : '这些任务还没有具体时间，别让它们长期漂着。';
+  const accent: 'warning' | 'muted' = group.group_date && index === 0 ? 'warning' : 'muted';
+
+  return (
+    <section className={`card-section agenda-section accent-${accent}`}>
       <div className="section-heading">
-        <div>
+        <div className="section-heading-copy">
           <strong>{group.title || formatDateLabel(group.group_date)}</strong>
-          <span>{group.tasks.length} 项</span>
+          <span>{description}</span>
+        </div>
+        <div className="section-heading-side">
+          <span className="section-count-badge">{group.tasks.length} 项</span>
         </div>
       </div>
       <div className="task-list">
         {group.tasks.length ? group.tasks.map((task) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} />) : <EmptyHint label="当天暂无任务" />}
+      </div>
+    </section>
+  );
+}
+
+function HistoryHero({
+  items,
+  filters,
+  onOpenFilter,
+  onResetFilters,
+}: {
+  items: Task[];
+  filters: { q: string; status: string; date: string };
+  onOpenFilter: () => void;
+  onResetFilters: () => void;
+}) {
+  const doneCount = items.filter((item) => item.status === 'done').length;
+  const changedProjects = Array.from(new Set(items.map((item) => item.project).filter(Boolean))).length;
+  const activeFilterCount = [filters.q, filters.status, filters.date].filter(Boolean).length;
+
+  return (
+    <section className="module-hero card-section accent-muted">
+      <div className="module-hero-main">
+        <span className="topbar-kicker">历史回看</span>
+        <h2>{activeFilterCount > 0 ? `当前带着 ${activeFilterCount} 个筛选条件回看` : '最近更新都在这里'}</h2>
+        <p>
+          {activeFilterCount > 0
+            ? '筛选已经生效，下面这批记录更适合带着问题回看。若范围太窄，一键清空会更快。'
+            : '这里不是存档仓库，而是给你快速回忆“最近刚动过哪些事”的地方。'}
+        </p>
+        <div className="today-hero-actions">
+          <button type="button" className="hero-primary-button" onClick={onOpenFilter}>
+            筛选历史
+          </button>
+          {activeFilterCount > 0 && (
+            <button type="button" className="hero-secondary-button" onClick={onResetFilters}>
+              清空筛选
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="today-stat-grid">
+        <div className="today-stat-card">
+          <span>当前结果</span>
+          <strong>{items.length}</strong>
+        </div>
+        <div className="today-stat-card today-stat-card-warning">
+          <span>已完成</span>
+          <strong>{doneCount}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>涉及项目</span>
+          <strong>{changedProjects}</strong>
+        </div>
+        <div className="today-stat-card">
+          <span>筛选数</span>
+          <strong>{activeFilterCount}</strong>
+        </div>
       </div>
     </section>
   );
