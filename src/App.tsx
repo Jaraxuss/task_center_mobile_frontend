@@ -469,7 +469,7 @@ function App() {
 
         {activeTab === 'plan' && (
           <section className="page">
-            <PlanHero groups={planGroups} />
+            <PlanHero groups={planGroups} onCreateTask={openTaskCreator} />
             {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
@@ -708,6 +708,13 @@ function TodayHero({
           <p>{heroCopy.description}</p>
         </div>
         <div className="today-hero-actions">
+          <button type="button" className="hero-primary-button hero-action-button" onClick={onCreateTask}>
+            <div className="hero-action-copy">
+              <span className="hero-action-kicker">创建任务</span>
+              <strong>新建任务</strong>
+            </div>
+            <span className="hero-action-glyph">+</span>
+          </button>
           <button type="button" className="hero-secondary-button hero-action-button" onClick={onOpenPlan}>
             <div className="hero-action-copy">
               <span className="hero-action-kicker">查看安排</span>
@@ -818,7 +825,7 @@ function TaskGroupSection({
   );
 }
 
-function PlanHero({ groups }: { groups: PlanGroup[] }) {
+function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask: () => void }) {
   const datedGroups = groups.filter((group) => group.group_date);
   const nextGroup = datedGroups[0];
   const plannedCount = groups.reduce((sum, group) => sum + group.tasks.length, 0);
