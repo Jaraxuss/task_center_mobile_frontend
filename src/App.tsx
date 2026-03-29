@@ -469,7 +469,10 @@ function App() {
 
         {activeTab === 'plan' && (
           <section className="page">
-            <PlanHero groups={planGroups} onCreateTask={openTaskCreator} />
+            <PlanHero groups={planGroups} onCreateTask={() => {
+              setEditorDraft(makeTaskFormState());
+              setEditorMode('create');
+            }} />
             {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
@@ -788,7 +791,7 @@ function TaskGroupSection({
   description?: string;
   tasks: Task[];
   onOpenTask: (task: Task) => void;
-  accent: 'danger' | 'warning' | 'brand' | 'muted' | 'success' | 'board';
+  accent: 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board';
   defaultCollapsed?: boolean;
   hideWhenEmpty?: boolean;
   variant?: 'default' | 'today';
@@ -833,33 +836,41 @@ function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask:
   const nextCount = nextGroup?.tasks.length || 0;
 
   return (
-    <section className="module-hero card-section accent-brand-soft">
-      <div className="module-hero-main">
-        <span className="topbar-kicker">计划视图</span>
-        <h2>{nextGroup ? `下一组安排在 ${nextGroup.title}` : '计划已经排得很空'}</h2>
-        <p>
-          {nextGroup
-            ? `先看最近日期，再决定今天之外的事要不要提前处理。未排期的任务会单独收口，不和日程混在一起。`
-            : '当前没有按日期排好的计划任务，如果临时想到事，可以直接新建再补时间。'}
-        </p>
+    <section className="plan-hero card-section">
+      <div className="plan-hero-main">
+        <div className="plan-hero-header">
+          <span className="plan-kicker">计划视图</span>
+        </div>
+        <div className="plan-hero-copy">
+          <h2>{nextGroup ? `${nextGroup.title} · ${nextCount} 项` : '计划已经排得很空'}</h2>
+          <p>
+            {nextGroup
+              ? '按时间顺序排布，适合提前看后面的节奏。未排期的任务单独收口，不和日程混在一起。'
+              : '临时想到事可以直接新建，再补时间。'}
+          </p>
+        </div>
       </div>
-      <div className="today-stat-grid">
-        <div className="today-stat-card">
-          <span>计划总数</span>
-          <strong>{plannedCount}</strong>
+      <div className="plan-stat-row">
+        <div className="plan-stat-item">
+          <span className="plan-stat-label">计划总数</span>
+          <strong className="plan-stat-value">{plannedCount}</strong>
         </div>
-        <div className="today-stat-card today-stat-card-warning">
-          <span>最近日期任务</span>
-          <strong>{nextCount}</strong>
+        <div className="plan-stat-divider" />
+        <div className="plan-stat-item">
+          <span className="plan-stat-label">未排期</span>
+          <strong className="plan-stat-value">{unscheduledCount}</strong>
         </div>
-        <div className="today-stat-card">
-          <span>未排期</span>
-          <strong>{unscheduledCount}</strong>
+        <div className="plan-stat-divider" />
+        <div className="plan-stat-item">
+          <span className="plan-stat-label">日期组</span>
+          <strong className="plan-stat-value">{datedGroups.length}</strong>
         </div>
-        <div className="today-stat-card">
-          <span>日期组</span>
-          <strong>{datedGroups.length}</strong>
-        </div>
+      </div>
+      <div className="plan-hero-actions">
+        <button type="button" className="plan-primary-btn" onClick={onCreateTask}>
+          <span className="plan-btn-glyph">＋</span>
+          <span>新建任务</span>
+        </button>
       </div>
     </section>
   );
@@ -871,7 +882,7 @@ function PlanDaySection({ group, onOpenTask, index = 0 }: { group: PlanGroup; on
       ? '离现在最近的一组，优先看这里。'
       : '按日期顺序排布，适合提前看后面的安排。'
     : '这些任务还没有具体时间，别让它们长期漂着。';
-  const accent: 'warning' | 'muted' = group.group_date && index === 0 ? 'warning' : 'muted';
+  const accent: 'plan' | 'muted' = group.group_date && index === 0 ? 'plan' : 'muted';
 
   return (
     <section className={`card-section agenda-section accent-${accent}`}>
