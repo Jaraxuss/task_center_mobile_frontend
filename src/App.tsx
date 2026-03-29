@@ -412,7 +412,7 @@ function App() {
       <header className={activeTab === 'today' ? 'topbar topbar-compact' : 'topbar'}>
         <div className="topbar-copy">
           <div className="topbar-kicker">task_center mobile</div>
-          {activeTab !== 'today' && <h1>{currentTitle}</h1>}
+          {activeTab !== 'today' && activeTab !== 'plan' && <h1>{currentTitle}</h1>}
         </div>
         <div className="topbar-actions">
           <button
@@ -469,10 +469,7 @@ function App() {
 
         {activeTab === 'plan' && (
           <section className="page">
-            <PlanHero groups={planGroups} onCreateTask={() => {
-              setEditorDraft(makeTaskFormState());
-              setEditorMode('create');
-            }} />
+            <PlanHero groups={planGroups} />
             {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
@@ -828,21 +825,18 @@ function TaskGroupSection({
   );
 }
 
-function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask: () => void }) {
+function PlanHero({ groups }: { groups: PlanGroup[] }) {
   const datedGroups = groups.filter((group) => group.group_date);
   const nextGroup = datedGroups[0];
   const plannedCount = groups.reduce((sum, group) => sum + group.tasks.length, 0);
   const unscheduledCount = groups.find((group) => group.key === 'unscheduled')?.tasks.length || 0;
-  const nextCount = nextGroup?.tasks.length || 0;
 
   return (
-    <section className="plan-hero card-section">
-      <div className="plan-hero-main">
-        <div className="plan-hero-header">
-          <span className="plan-kicker">计划视图</span>
-        </div>
-        <div className="plan-hero-copy">
-          <h2>{nextGroup ? `${nextGroup.title} · ${nextCount} 项` : '计划已经排得很空'}</h2>
+    <section className="today-hero card-section accent-brand-soft">
+      <div className="today-hero-main">
+        <div className="today-hero-heading">
+          <span className="topbar-kicker today-hero-kicker">计划节奏</span>
+          <h2>{nextGroup ? `${nextGroup.title} · ${nextGroup.tasks.length} 项` : '计划已经排得很空'}</h2>
           <p>
             {nextGroup
               ? '按时间顺序排布，适合提前看后面的节奏。未排期的任务单独收口，不和日程混在一起。'
@@ -850,27 +844,19 @@ function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask:
           </p>
         </div>
       </div>
-      <div className="plan-stat-row">
-        <div className="plan-stat-item">
-          <span className="plan-stat-label">计划总数</span>
-          <strong className="plan-stat-value">{plannedCount}</strong>
-        </div>
-        <div className="plan-stat-divider" />
-        <div className="plan-stat-item">
-          <span className="plan-stat-label">未排期</span>
-          <strong className="plan-stat-value">{unscheduledCount}</strong>
-        </div>
-        <div className="plan-stat-divider" />
-        <div className="plan-stat-item">
-          <span className="plan-stat-label">日期组</span>
-          <strong className="plan-stat-value">{datedGroups.length}</strong>
-        </div>
-      </div>
-      <div className="plan-hero-actions">
-        <button type="button" className="plan-primary-btn" onClick={onCreateTask}>
-          <span className="plan-btn-glyph">＋</span>
-          <span>新建任务</span>
-        </button>
+      <div className="today-priority-strip" aria-label="计划统计">
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">计划总数</span>
+          <strong>{plannedCount}</strong>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">未排期</span>
+          <strong>{unscheduledCount}</strong>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">日期组</span>
+          <strong>{datedGroups.length}</strong>
+        </span>
       </div>
     </section>
   );
@@ -972,8 +958,8 @@ function TaskRow({ task, onClick, showUpdated = false }: { task: Task; onClick: 
         <div className="task-title">{task.title}</div>
         <div className="task-meta">
           <StatusPill status={task.status} />
-          <span>{formatDateTime(getTaskScheduleAt(task))}</span>
-          {task.project && <span>{task.project}</span>}
+          <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
+          {task.project && <span className="project-pill">{task.project}</span>}
           {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
         </div>
         {task.description && <div className="task-desc">{task.description}</div>}
