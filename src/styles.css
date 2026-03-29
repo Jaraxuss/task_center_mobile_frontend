@@ -871,13 +871,13 @@ button {
 .editor-submit-bar {
   position: sticky;
   bottom: 0;
-  padding: 6px 0 calc(env(safe-area-inset-bottom) + 4px);
+  padding: 6px 16px calc(env(safe-area-inset-bottom) + 4px);
   background: linear-gradient(180deg, rgba(243, 245, 251, 0), rgba(243, 245, 251, 0.96) 24%, rgba(243, 245, 251, 0.99));
 }
 
 .editor-submit-button {
   background: linear-gradient(180deg, #4469ef, var(--brand));
-  box-shadow: 0 18px 34px rgba(49, 87, 225, 0.24);
+  box-shadow: 0 4px 12px rgba(49, 87, 225, 0.14);
 }
 
 .action-button:disabled {

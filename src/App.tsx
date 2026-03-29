@@ -416,35 +416,24 @@ function App() {
         </div>
         <div className="topbar-actions">
           <button
-            className="ghost-button"
+            className="icon-button"
+            type="button"
+            onClick={() => setActiveTab('plan')}
+            aria-label="跳转到计划"
+          >
+            📅
+          </button>
+          <button
+            className="icon-button"
             type="button"
             onClick={() => {
-              if (activeTab === 'history') {
-                setShowHistoryFilter(true);
-                return;
-              }
-              if (activeTab === 'board') {
-                setBoardMode((prev) => (prev === 'status' ? 'project' : 'status'));
-                return;
-              }
-              void today.refresh();
+              setEditorDraft(makeTaskFormState());
+              setEditorMode('create');
             }}
+            aria-label="新建任务"
           >
-            {primaryActionLabel}
+            +
           </button>
-          {activeTab !== 'history' && (
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => {
-                setEditorDraft(makeTaskFormState());
-                setEditorMode('create');
-              }}
-              aria-label="新建任务"
-            >
-              +
-            </button>
-          )}
         </div>
       </header>
 
@@ -480,10 +469,7 @@ function App() {
 
         {activeTab === 'plan' && (
           <section className="page">
-            <PlanHero groups={planGroups} onCreateTask={() => {
-              setEditorDraft(makeTaskFormState());
-              setEditorMode('create');
-            }} />
+            <PlanHero groups={planGroups} />
             {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
@@ -722,13 +708,6 @@ function TodayHero({
           <p>{heroCopy.description}</p>
         </div>
         <div className="today-hero-actions">
-          <button type="button" className="hero-primary-button hero-action-button" onClick={onCreateTask}>
-            <div className="hero-action-copy">
-              <span className="hero-action-kicker">快速开始</span>
-              <strong>新建任务</strong>
-            </div>
-            <span className="hero-action-glyph">＋</span>
-          </button>
           <button type="button" className="hero-secondary-button hero-action-button" onClick={onOpenPlan}>
             <div className="hero-action-copy">
               <span className="hero-action-kicker">查看安排</span>
@@ -839,7 +818,7 @@ function TaskGroupSection({
   );
 }
 
-function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask: () => void }) {
+function PlanHero({ groups }: { groups: PlanGroup[] }) {
   const datedGroups = groups.filter((group) => group.group_date);
   const nextGroup = datedGroups[0];
   const plannedCount = groups.reduce((sum, group) => sum + group.tasks.length, 0);
@@ -856,11 +835,6 @@ function PlanHero({ groups, onCreateTask }: { groups: PlanGroup[]; onCreateTask:
             ? `先看最近日期，再决定今天之外的事要不要提前处理。未排期的任务会单独收口，不和日程混在一起。`
             : '当前没有按日期排好的计划任务，如果临时想到事，可以直接新建再补时间。'}
         </p>
-        <div className="today-hero-actions">
-          <button type="button" className="hero-primary-button" onClick={onCreateTask}>
-            新建任务
-          </button>
-        </div>
       </div>
       <div className="today-stat-grid">
         <div className="today-stat-card">
@@ -1146,7 +1120,6 @@ function TaskEditorSheet({
             关闭
           </button>
           <strong>{mode === 'create' ? '新建任务' : '编辑任务'}</strong>
-          <span className="muted-text">把时间、状态和节奏一次定清楚</span>
         </div>
 
         <div className="editor-form">
