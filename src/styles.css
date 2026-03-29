@@ -132,6 +132,22 @@ button {
     linear-gradient(180deg, rgba(255, 255, 255, 0.99), rgba(248, 251, 255, 0.97));
 }
 
+.today-hero {
+  overflow: hidden;
+}
+
+.today-hero::after {
+  content: '';
+  position: absolute;
+  right: -42px;
+  top: -34px;
+  width: 140px;
+  height: 140px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(49, 87, 225, 0.12), rgba(49, 87, 225, 0.01) 68%, transparent 72%);
+  pointer-events: none;
+}
+
 .module-hero {
   background:
     radial-gradient(circle at top right, rgba(49, 87, 225, 0.08), transparent 42%),
@@ -154,10 +170,11 @@ button {
 .today-hero h2,
 .module-hero h2 {
   margin: 0;
-  max-width: 16ch;
-  font-size: clamp(24px, 5.8vw, 30px);
-  line-height: 1.08;
-  letter-spacing: -0.04em;
+  max-width: 17ch;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: clamp(24px, 5.6vw, 29px);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
 }
 
 .today-hero p,
@@ -201,10 +218,17 @@ button {
   display: flex;
   flex: 1 1 0;
   min-width: 0;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
   text-align: left;
+}
+
+.hero-action-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
 }
 
 .hero-action-button strong {
@@ -215,16 +239,33 @@ button {
 
 .hero-action-kicker {
   display: block;
-  font-size: 11px;
-  letter-spacing: 0.08em;
+  font-size: 10px;
+  letter-spacing: 0.11em;
   text-transform: uppercase;
-  opacity: 0.78;
+  opacity: 0.72;
+}
+
+.hero-action-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  font-size: 17px;
+  line-height: 1;
 }
 
 .hero-primary-button {
-  background: linear-gradient(180deg, #4568ee, var(--brand));
+  background: linear-gradient(180deg, #4d6df0, var(--brand));
   color: #fff;
-  box-shadow: 0 14px 28px rgba(49, 87, 225, 0.22);
+  box-shadow: 0 16px 30px rgba(49, 87, 225, 0.24);
+}
+
+.hero-primary-button .hero-action-glyph {
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 
 .hero-secondary-button {
@@ -232,6 +273,12 @@ button {
   border-color: var(--line-strong);
   color: var(--text);
   box-shadow: var(--shadow-soft);
+}
+
+.hero-secondary-button .hero-action-glyph {
+  background: rgba(49, 87, 225, 0.08);
+  color: var(--brand-strong);
+  border: 1px solid rgba(49, 87, 225, 0.08);
 }
 
 .hero-primary-button:active,
@@ -525,6 +572,34 @@ button {
   padding: 0 12px 12px;
   gap: 10px;
 }
+
+.today-group-card {
+  border-color: rgba(230, 234, 243, 0.96);
+}
+
+.today-group-heading {
+  padding-bottom: 12px;
+}
+
+.today-group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.today-group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.today-group-dot-danger { background: var(--danger); }
+.today-group-dot-warning { background: var(--warning); }
+.today-group-dot-brand { background: var(--brand); }
+.today-group-dot-muted { background: #9aa5bb; }
+.today-group-dot-success { background: var(--success); }
+.today-group-dot-board { background: var(--brand); }
 
 .task-row {
   display: flex;

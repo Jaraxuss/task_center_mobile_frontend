@@ -468,11 +468,11 @@ function App() {
                 {todayGroups.overdue.length === 0 && todayGroups.dueToday.length === 0 && todayGroups.doing.length === 0 && todayGroups.later.length === 0 && (
                   <StateCard text="今天暂时没有待处理任务，节奏还算稳。" />
                 )}
-                <TaskGroupSection title="先处理" description="已经逾期，先止血再继续排今天的活。" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} hideWhenEmpty />
-                <TaskGroupSection title="今天要收口" description="今天到期的事，优先别拖到明天。" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} hideWhenEmpty />
-                <TaskGroupSection title="正在推进" description="已经开工的任务，适合趁手往前推。" tasks={todayGroups.doing} accent="brand" onOpenTask={openTask} hideWhenEmpty />
-                <TaskGroupSection title="稍后处理" description="没有卡在当下，但也别让它们消失。" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} hideWhenEmpty />
-                <TaskGroupSection title="已完成" description="今天已经收口的事项，默认折叠。" tasks={todayGroups.completed} accent="success" defaultCollapsed onOpenTask={openTask} hideWhenEmpty />
+                <TaskGroupSection title="先处理" description="已经逾期，先止血再继续排今天的活。" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="今天要收口" description="今天到期的事，优先别拖到明天。" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="正在推进" description="已经开工的任务，适合趁手往前推。" tasks={todayGroups.doing} accent="brand" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="稍后处理" description="没有卡在当下，但也别让它们消失。" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="已完成" description="今天已经收口的事项，默认折叠。" tasks={todayGroups.completed} accent="success" defaultCollapsed onOpenTask={openTask} hideWhenEmpty variant="today" />
               </>
             )}
           </section>
@@ -723,12 +723,18 @@ function TodayHero({
         </div>
         <div className="today-hero-actions">
           <button type="button" className="hero-primary-button hero-action-button" onClick={onCreateTask}>
-            <span className="hero-action-kicker">快速开始</span>
-            <strong>新建任务</strong>
+            <div className="hero-action-copy">
+              <span className="hero-action-kicker">快速开始</span>
+              <strong>新建任务</strong>
+            </div>
+            <span className="hero-action-glyph">＋</span>
           </button>
           <button type="button" className="hero-secondary-button hero-action-button" onClick={onOpenPlan}>
-            <span className="hero-action-kicker">查看安排</span>
-            <strong>看计划</strong>
+            <div className="hero-action-copy">
+              <span className="hero-action-kicker">查看安排</span>
+              <strong>看计划</strong>
+            </div>
+            <span className="hero-action-glyph">→</span>
           </button>
         </div>
       </div>
@@ -790,6 +796,7 @@ function TaskGroupSection({
   accent,
   defaultCollapsed = false,
   hideWhenEmpty = false,
+  variant = 'default',
 }: {
   title: string;
   description?: string;
@@ -798,6 +805,7 @@ function TaskGroupSection({
   accent: 'danger' | 'warning' | 'brand' | 'muted' | 'success' | 'board';
   defaultCollapsed?: boolean;
   hideWhenEmpty?: boolean;
+  variant?: 'default' | 'today';
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -808,10 +816,13 @@ function TaskGroupSection({
   if (hideWhenEmpty && tasks.length === 0) return null;
 
   return (
-    <section className={`card-section accent-${accent}`}>
-      <button type="button" className="section-heading collapsible-heading" onClick={() => setCollapsed((prev) => !prev)}>
+    <section className={`card-section accent-${accent} ${variant === 'today' ? 'today-group-card' : ''}`}>
+      <button type="button" className={`section-heading collapsible-heading ${variant === 'today' ? 'today-group-heading' : ''}`} onClick={() => setCollapsed((prev) => !prev)}>
         <div className="section-heading-copy">
-          <strong>{title}</strong>
+          <div className="today-group-title-row">
+            {variant === 'today' && <span className={`today-group-dot today-group-dot-${accent}`}></span>}
+            <strong>{title}</strong>
+          </div>
           {description ? <span>{description}</span> : <span>{tasks.length} 项</span>}
         </div>
         <div className="section-heading-side">
