@@ -72,6 +72,18 @@ button {
   backdrop-filter: blur(18px);
 }
 
+.topbar-compact {
+  align-items: center;
+  padding-top: 14px;
+}
+
+.topbar-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .topbar h1 {
   margin: 2px 0 0;
   font-size: 28px;
@@ -93,6 +105,10 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.topbar-compact .topbar-actions {
+  gap: 10px;
 }
 
 .content {
@@ -138,10 +154,10 @@ button {
 .today-hero h2,
 .module-hero h2 {
   margin: 0;
-  max-width: 12ch;
-  font-size: clamp(30px, 7vw, 36px);
-  line-height: 1.02;
-  letter-spacing: -0.045em;
+  max-width: 16ch;
+  font-size: clamp(24px, 5.8vw, 30px);
+  line-height: 1.08;
+  letter-spacing: -0.04em;
 }
 
 .today-hero p,
@@ -173,22 +189,46 @@ button {
 
 .hero-primary-button,
 .hero-secondary-button {
-  min-height: 44px;
-  padding: 11px 15px;
-  border-radius: 14px;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 18px;
   font-weight: 700;
   border: 1px solid transparent;
   transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease;
 }
 
+.hero-action-button {
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+}
+
+.hero-action-button strong {
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.hero-action-kicker {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
 .hero-primary-button {
-  background: linear-gradient(180deg, #3f63ea, var(--brand));
+  background: linear-gradient(180deg, #4568ee, var(--brand));
   color: #fff;
-  box-shadow: 0 12px 24px rgba(49, 87, 225, 0.22);
+  box-shadow: 0 14px 28px rgba(49, 87, 225, 0.22);
 }
 
 .hero-secondary-button {
-  background: rgba(255, 255, 255, 0.92);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94));
   border-color: var(--line-strong);
   color: var(--text);
   box-shadow: var(--shadow-soft);
@@ -405,6 +445,16 @@ button {
 
 .card-section {
   overflow: hidden;
+  position: relative;
+}
+
+.card-section::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.85);
+  pointer-events: none;
 }
 
 .section-heading {
@@ -873,28 +923,58 @@ button {
 }
 
 .accent-danger {
-  border-left: 4px solid var(--danger);
+  background: linear-gradient(180deg, rgba(255, 241, 243, 0.92), rgba(255, 255, 255, 0.98) 88px);
+  border-color: rgba(201, 63, 79, 0.12);
 }
 
 .accent-warning {
-  border-left: 4px solid var(--warning);
+  background: linear-gradient(180deg, rgba(255, 247, 234, 0.94), rgba(255, 255, 255, 0.98) 88px);
+  border-color: rgba(183, 121, 31, 0.12);
 }
 
 .accent-brand,
 .accent-board {
-  border-left: 4px solid var(--brand);
+  background: linear-gradient(180deg, rgba(232, 237, 255, 0.9), rgba(255, 255, 255, 0.98) 88px);
+  border-color: rgba(49, 87, 225, 0.12);
 }
 
 .accent-brand-soft {
-  border-left: 4px solid rgba(51, 92, 255, 0.32);
+  border-color: rgba(49, 87, 225, 0.16);
 }
 
 .accent-muted {
-  border-left: 4px solid #b6bfd2;
+  background: linear-gradient(180deg, rgba(245, 247, 251, 0.96), rgba(255, 255, 255, 0.98) 88px);
+  border-color: rgba(150, 162, 184, 0.12);
 }
 
 .accent-success {
-  border-left: 4px solid var(--success);
+  background: linear-gradient(180deg, rgba(237, 249, 242, 0.94), rgba(255, 255, 255, 0.98) 88px);
+  border-color: rgba(23, 130, 79, 0.12);
+}
+
+.accent-danger .section-count-badge {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--danger);
+  border-color: rgba(201, 63, 79, 0.16);
+}
+
+.accent-warning .section-count-badge {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--warning);
+  border-color: rgba(183, 121, 31, 0.18);
+}
+
+.accent-brand .section-count-badge,
+.accent-board .section-count-badge {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--brand-strong);
+  border-color: rgba(49, 87, 225, 0.16);
+}
+
+.accent-success .section-count-badge {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--success);
+  border-color: rgba(23, 130, 79, 0.16);
 }
 
 @media (min-width: 481px) {

@@ -409,10 +409,10 @@ function App() {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div>
+      <header className={activeTab === 'today' ? 'topbar topbar-compact' : 'topbar'}>
+        <div className="topbar-copy">
           <div className="topbar-kicker">task_center mobile</div>
-          <h1>{currentTitle}</h1>
+          {activeTab !== 'today' && <h1>{currentTitle}</h1>}
         </div>
         <div className="topbar-actions">
           <button
@@ -704,7 +704,7 @@ function TodayHero({
         : openCount > 0
           ? {
               kicker: '今天节奏',
-              title: `当前还有 ${openCount} 项待处理`,
+              title: `还有 ${openCount} 项待处理`,
               description: '没有特别紧急的阻塞项，适合按顺序稳稳推进。',
             }
           : {
@@ -722,11 +722,13 @@ function TodayHero({
           <p>{heroCopy.description}</p>
         </div>
         <div className="today-hero-actions">
-          <button type="button" className="hero-primary-button" onClick={onCreateTask}>
-            新建任务
+          <button type="button" className="hero-primary-button hero-action-button" onClick={onCreateTask}>
+            <span className="hero-action-kicker">快速开始</span>
+            <strong>新建任务</strong>
           </button>
-          <button type="button" className="hero-secondary-button" onClick={onOpenPlan}>
-            看计划
+          <button type="button" className="hero-secondary-button hero-action-button" onClick={onOpenPlan}>
+            <span className="hero-action-kicker">查看安排</span>
+            <strong>看计划</strong>
           </button>
         </div>
       </div>
