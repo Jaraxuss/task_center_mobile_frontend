@@ -1190,8 +1190,7 @@ function TaskDetailSheet({
         </div>
 
         <div className="detail-body">
-          {loading && <StateCard text="详情刷新中…" />}
-          <div className="detail-card">
+          <div className={loading ? 'detail-card detail-card-loading' : 'detail-card'}>
             <h2>{task.title}</h2>
             <div className="detail-grid">
               <DetailItem label="状态" value={statusLabelMap[task.status]} />
