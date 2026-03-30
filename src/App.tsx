@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData } from './hooks';
 import { DashboardBoardGroup, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
-import { describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
+import { APP_TIME_ZONE, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
 type BoardMode = 'status' | 'project';
@@ -46,6 +46,14 @@ const boardTitles: Record<TaskStatus, string> = {
   canceled: '已取消',
 };
 
+const boardGroupDescriptions: Record<TaskStatus, string> = {
+  todo: '还没开动，但已经进入手里这盘活。先排优先级，再决定谁先推进。',
+  doing: '已经在动的事项，适合快速扫一眼当前推进面。',
+  deferred: '不是不做，只是被顺延。定期回看，别让它们长期漂着。',
+  done: '已经收口的事项，保留回看价值，但不该抢当前注意力。',
+  canceled: '明确停止推进的事项，留作判断记录，不再投入精力。',
+};
+
 const recurrenceFrequencyOptions: Array<{ value: 'daily' | 'weekly' | 'monthly'; label: string }> = [
   { value: 'daily', label: '每天 / 每 N 天' },
   { value: 'weekly', label: '每周 / 指定星期' },
@@ -64,17 +72,24 @@ const weekdayOptions = [
 
 function formatDateTimeInput(value?: string | null) {
   if (!value) return '';
+  const normalized = value.trim().replace(' ', 'T');
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return normalized;
+  const withSecondsMatch = normalized.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):\d{2}(?:\.\d+)?$/);
+  if (withSecondsMatch) return withSecondsMatch[1];
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset();
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 function toIsoOrNull(value: string) {
   if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  const normalized = value.trim().replace(' ', 'T');
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return null;
+  return `${normalized}:00`;
+}
+
+function localNowString() {
+  return toIsoOrNull(formatDateTimeInput(new Date().toISOString())) || new Date().toISOString();
 }
 
 function getTaskScheduleAt(task?: Task | null) {
@@ -106,10 +121,10 @@ function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): Tas
   const interval = Math.max(1, Number(draft.recurrence_interval || 1) || 1);
   const dueDate = new Date(dueAt);
   const daysOfWeek = draft.recurrence_frequency === 'weekly'
-    ? normalizeWeekdays(draft.recurrence_weekdays.length ? draft.recurrence_weekdays : [((dueDate.getUTCDay() + 6) % 7) + 1])
+    ? normalizeWeekdays(draft.recurrence_weekdays.length ? draft.recurrence_weekdays : [((dueDate.getDay() + 6) % 7) + 1])
     : [];
   const dayOfMonth = draft.recurrence_frequency === 'monthly'
-    ? Math.min(31, Math.max(1, Number(draft.recurrence_month_day || dueDate.getUTCDate()) || 1))
+    ? Math.min(31, Math.max(1, Number(draft.recurrence_month_day || dueDate.getDate()) || 1))
     : null;
   const hours = String(dueDate.getHours()).padStart(2, '0');
   const minutes = String(dueDate.getMinutes()).padStart(2, '0');
@@ -121,7 +136,7 @@ function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): Tas
     days_of_week: daysOfWeek,
     day_of_month: dayOfMonth,
     end_at: toIsoOrNull(draft.recurrence_until),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai',
+    timezone: APP_TIME_ZONE,
     time_of_day: `${hours}:${minutes}:00`,
     start_at: dueAt,
   };
@@ -186,8 +201,26 @@ function upsertTask(list: Task[], updated: Task) {
   return sortTasksByUpdated(next);
 }
 
+function getHistoryDateGroups(tasks: Task[]) {
+  const map = new Map<string, Task[]>();
+  tasks.forEach((task) => {
+    const key = task.updated_at?.slice(0, 10) || 'unknown';
+    const list = map.get(key) || [];
+    list.push(task);
+    map.set(key, list);
+  });
+
+  return Array.from(map.entries())
+    .sort(([a], [b]) => b.localeCompare(a))
+    .map(([key, list]) => ({
+      key,
+      title: key === 'unknown' ? '更早之前' : formatDateLabel(key),
+      tasks: sortTasksByUpdated(list),
+    }));
+}
+
 function makeOptimisticTask(task: Task, type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
-  const now = new Date().toISOString();
+  const now = localNowString();
   if (type === 'complete') {
     return { ...task, status: 'done' as TaskStatus, completed_at: now, canceled_at: null, updated_at: now };
   }
@@ -219,6 +252,7 @@ function App() {
   const [showHistoryFilter, setShowHistoryFilter] = useState(false);
   const [historyDraft, setHistoryDraft] = useState(initialRoute.historyDraft);
   const [historyFilters, setHistoryFilters] = useState(initialRoute.historyDraft);
+  const [visibleProjectGroupCount, setVisibleProjectGroupCount] = useState(6);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -226,6 +260,7 @@ function App() {
   const [actionSheet, setActionSheet] = useState<ActionSheetState | null>(null);
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
+  const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const today = useAsyncData(() => api.getTodayDashboard(), [], activeTab === 'today' || activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
@@ -236,6 +271,12 @@ function App() {
     [historyFilters.q, historyFilters.status, historyFilters.date],
     activeTab === 'history',
   );
+
+  const boardStatusGroups = board.data?.groups || [];
+  const boardProjectGroups = useMemo(() => groupTasksByProject(allTasks.data || []), [allTasks.data]);
+  const visibleProjectGroups = useMemo(() => boardProjectGroups.slice(0, visibleProjectGroupCount), [boardProjectGroups, visibleProjectGroupCount]);
+  const boardGroups = boardMode === 'status' ? boardStatusGroups : visibleProjectGroups;
+  const hasMoreProjectGroups = boardMode === 'project' && visibleProjectGroupCount < boardProjectGroups.length;
 
   useEffect(() => {
     const onHashChange = () => {
@@ -249,6 +290,30 @@ function App() {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+
+  useEffect(() => {
+    if (boardMode !== 'project') {
+      setVisibleProjectGroupCount(6);
+      return;
+    }
+    setVisibleProjectGroupCount(6);
+  }, [boardMode, allTasks.data]);
+
+  useEffect(() => {
+    if (boardMode !== 'project' || !hasMoreProjectGroups || !projectLoadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleProjectGroupCount((prev) => Math.min(prev + 6, boardProjectGroups.length));
+        }
+      },
+      { root: null, rootMargin: '240px 0px 320px 0px', threshold: 0.01 },
+    );
+
+    observer.observe(projectLoadMoreRef.current);
+    return () => observer.disconnect();
+  }, [boardMode, hasMoreProjectGroups, boardProjectGroups.length]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -397,46 +462,13 @@ function App() {
     return todayData.planGroups?.length ? todayData.planGroups : fallbackPlanGroups(todayData.tasks);
   }, [todayData]);
   const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
-  const boardGroups = useMemo(() => {
-    if (boardMode === 'status') return board.data?.groups || [];
-    return groupTasksByProject(allTasks.data || []);
-  }, [boardMode, board.data, allTasks.data]);
+  const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
 
-  const currentTitle = tabs.find((tab) => tab.key === activeTab)?.label || '任务';
-  const primaryActionLabel = activeTab === 'history' ? '筛选' : activeTab === 'board' ? '分组' : '刷新';
   const summary = todayData?.summary;
   const projectNames = useMemo(() => (projects.data || []).map((item) => item.name).filter(Boolean), [projects.data]);
 
   return (
     <div className="app-shell">
-      <header className={activeTab === 'today' ? 'topbar topbar-compact' : 'topbar'}>
-        <div className="topbar-copy">
-          <div className="topbar-kicker">task_center mobile</div>
-          {activeTab !== 'today' && activeTab !== 'plan' && <h1>{currentTitle}</h1>}
-        </div>
-        <div className="topbar-actions">
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => setActiveTab('plan')}
-            aria-label="跳转到计划"
-          >
-            📅
-          </button>
-          <button
-            className="icon-button"
-            type="button"
-            onClick={() => {
-              setEditorDraft(makeTaskFormState());
-              setEditorMode('create');
-            }}
-            aria-label="新建任务"
-          >
-            +
-          </button>
-        </div>
-      </header>
-
       <main className="content">
         {activeTab === 'today' && (
           <section className="page">
@@ -454,13 +486,12 @@ function App() {
             {today.error && <StateCard text={today.error} tone="danger" />}
             {!today.loading && !today.error && today.loaded && (
               <>
-                {todayGroups.overdue.length === 0 && todayGroups.dueToday.length === 0 && todayGroups.doing.length === 0 && todayGroups.later.length === 0 && (
+                {todayGroups.overdue.length === 0 && todayGroups.dueToday.length === 0 && todayGroups.later.length === 0 && todayGroups.completed.length === 0 && (
                   <StateCard text="今天暂时没有待处理任务，节奏还算稳。" />
                 )}
-                <TaskGroupSection title="先处理" description="已经逾期，先止血再继续排今天的活。" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} hideWhenEmpty variant="today" />
-                <TaskGroupSection title="今天要收口" description="今天到期的事，优先别拖到明天。" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} hideWhenEmpty variant="today" />
-                <TaskGroupSection title="正在推进" description="已经开工的任务，适合趁手往前推。" tasks={todayGroups.doing} accent="brand" onOpenTask={openTask} hideWhenEmpty variant="today" />
-                <TaskGroupSection title="稍后处理" description="没有卡在当下，但也别让它们消失。" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="逾期" description="已经过点的事，先止血，再排今天后面的活。" tasks={todayGroups.overdue} accent="danger" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="今天到期" description="今天还没到点、但今天必须收口的事项。" tasks={todayGroups.dueToday} accent="warning" onOpenTask={openTask} hideWhenEmpty variant="today" />
+                <TaskGroupSection title="稍后处理" description="暂时不在最前面，但也别让它们消失。" tasks={todayGroups.later} accent="muted" onOpenTask={openTask} hideWhenEmpty variant="today" />
                 <TaskGroupSection title="已完成" description="今天已经收口的事项，默认折叠。" tasks={todayGroups.completed} accent="success" defaultCollapsed onOpenTask={openTask} hideWhenEmpty variant="today" />
               </>
             )}
@@ -479,21 +510,43 @@ function App() {
 
         {activeTab === 'board' && (
           <section className="page">
-            <div className="inline-switch">
-              <button type="button" className={boardMode === 'status' ? 'chip chip-active' : 'chip'} onClick={() => setBoardMode('status')}>
-                按状态
-              </button>
-              <button type="button" className={boardMode === 'project' ? 'chip chip-active' : 'chip'} onClick={() => setBoardMode('project')}>
-                按项目
-              </button>
-            </div>
-            <BoardMeta mode={boardMode} projects={projects.data || []} />
+            <BoardHero mode={boardMode} projects={projects.data || []} groups={boardMode === 'status' ? boardStatusGroups : boardProjectGroups} tasks={allTasks.data || []} onChangeMode={setBoardMode} />
             {((boardMode === 'status' && board.loading && !board.loaded) || (boardMode === 'project' && allTasks.loading && !allTasks.loaded)) && <StateCard text="看板加载中…" />}
             {(board.error || allTasks.error) && <StateCard text={board.error || allTasks.error || '加载失败'} tone="danger" />}
             {!board.error && !allTasks.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text="当前没有可展示的任务" />}
-            {!board.error && !allTasks.error && boardGroups.map((group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] }) => (
-              <TaskGroupSection key={group.key} title={group.title} tasks={group.tasks} accent="board" onOpenTask={openTask} />
-            ))}
+            {!board.error && !allTasks.error && boardGroups.map((group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] }) => {
+              const statusAccent = boardMode === 'status'
+                ? ((group.key === 'todo'
+                    ? 'brand'
+                    : group.key === 'doing'
+                      ? 'plan'
+                      : group.key === 'deferred'
+                        ? 'warning'
+                        : group.key === 'done'
+                          ? 'success'
+                          : 'muted') as 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board')
+                : ((group.tasks.length > 0 ? 'plan' : 'muted') as 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board');
+              const description = boardMode === 'status'
+                ? boardGroupDescriptions[group.key as TaskStatus]
+                : `${group.tasks.length} 项任务挂在这个项目下，适合集中收线，不用在全局列表里来回找。`;
+
+              return (
+                <TaskGroupSection
+                  key={group.key}
+                  title={group.title}
+                  description={description}
+                  tasks={group.tasks}
+                  accent={statusAccent}
+                  onOpenTask={openTask}
+                  variant="board"
+                />
+              );
+            })}
+            {boardMode === 'project' && hasMoreProjectGroups && (
+              <div ref={projectLoadMoreRef} className="scroll-load-sentinel" aria-hidden="true">
+                <span className="scroll-load-chip">继续下滑，自动加载更多项目</span>
+              </div>
+            )}
           </section>
         )}
 
@@ -512,22 +565,9 @@ function App() {
             {history.loading && !history.loaded && <StateCard text="历史记录加载中…" />}
             {history.error && <StateCard text={history.error} tone="danger" />}
             {!history.loading && !history.error && history.loaded && historyItems.length === 0 && <StateCard text="没有符合条件的历史记录" />}
-            {!history.loading && !history.error && history.loaded && historyItems.length > 0 && (
-              <section className="card-section accent-muted">
-                <div className="section-heading">
-                  <div className="section-heading-copy">
-                    <strong>最近更新</strong>
-                    <span>按最近更新时间倒序，方便快速回看刚动过的事。</span>
-                  </div>
-                  <div className="section-heading-side">
-                    <span className="section-count-badge">{history.data?.total || historyItems.length} 项</span>
-                  </div>
-                </div>
-                <div className="task-list">
-                  {historyItems.map((task) => <TaskRow key={task.id} task={task} onClick={() => openTask(task)} showUpdated />)}
-                </div>
-              </section>
-            )}
+            {!history.loading && !history.error && history.loaded && historyDateGroups.map((group) => (
+              <HistoryDaySection key={group.key} title={group.title} tasks={group.tasks} total={history.data?.total || historyItems.length} onOpenTask={openTask} showTotal={group.key === historyDateGroups[0]?.key} />
+            ))}
           </section>
         )}
       </main>
@@ -659,39 +699,39 @@ function TodayHero({
 }) {
   const overdueCount = groups.overdue.length;
   const dueTodayCount = groups.dueToday.length;
-  const doingCount = groups.doing.length;
   const laterCount = groups.later.length;
-  const openCount = summary?.open ?? overdueCount + dueTodayCount + doingCount + laterCount;
-  const primaryTask = groups.overdue[0] || groups.dueToday[0] || groups.doing[0] || groups.later[0] || null;
+  const completedCount = groups.completed.length;
+  const openCount = summary?.open ?? overdueCount + dueTodayCount + laterCount;
+  const primaryTask = groups.overdue[0] || groups.dueToday[0] || groups.later[0] || null;
   const queueText = [
     overdueCount > 0 ? `${overdueCount} 项逾期` : null,
     dueTodayCount > 0 ? `${dueTodayCount} 项今天到期` : null,
-    doingCount > 0 ? `${doingCount} 项进行中` : null,
+    laterCount > 0 ? `${laterCount} 项稍后处理` : null,
   ].filter(Boolean).join(' · ');
 
   const heroCopy = overdueCount > 0
     ? {
         kicker: '先处理风险项',
         title: `${overdueCount} 项逾期任务待收口`,
-        description: '先把已经拖住节奏的事处理掉，再看今天新增，不然后面的安排都会被带偏。',
+        description: `先把已经过点的事处理掉。当前未完成 ${openCount} 项，别让后面的安排继续被带偏。`,
       }
     : dueTodayCount > 0
       ? {
           kicker: '今天优先级',
           title: `今天还有 ${dueTodayCount} 项要收口`,
-          description: '今天到期的任务已经浮上来了，优先清掉，别让明天先背债。',
+          description: `今天到期的任务已经浮上来了。当前未完成 ${openCount} 项，优先清掉再排后面的活。`,
         }
-      : doingCount > 0
+      : laterCount > 0
         ? {
-            kicker: '继续推进',
-            title: `手上有 ${doingCount} 项正在推进`,
-            description: '今天没有明显爆点，适合把手上的事往前推一截。',
+            kicker: '今天节奏',
+            title: `还有 ${laterCount} 项稍后处理`,
+            description: `今天没有明显爆点，当前未完成 ${openCount} 项，适合按顺序稳稳推进。`,
           }
-        : openCount > 0
+        : completedCount > 0
           ? {
-              kicker: '今天节奏',
-              title: `还有 ${openCount} 项待处理`,
-              description: '没有特别紧急的阻塞项，适合按顺序稳稳推进。',
+              kicker: '今天有产出',
+              title: `已经完成 ${completedCount} 项`,
+              description: '当前没有挂在眼前的待办，今天的收口进度是正向的。',
             }
           : {
               kicker: '今天很干净',
@@ -735,12 +775,12 @@ function TodayHero({
           <strong>{dueTodayCount}</strong>
         </span>
         <span className="today-priority-chip">
-          <span className="today-priority-chip-label">进行中</span>
-          <strong>{doingCount}</strong>
+          <span className="today-priority-chip-label">稍后处理</span>
+          <strong>{laterCount}</strong>
         </span>
-        <span className="today-priority-chip">
-          <span className="today-priority-chip-label">待处理</span>
-          <strong>{openCount}</strong>
+        <span className={completedCount > 0 ? 'today-priority-chip today-priority-chip-success' : 'today-priority-chip'}>
+          <span className="today-priority-chip-label">已完成</span>
+          <strong>{completedCount}</strong>
         </span>
       </div>
 
@@ -791,7 +831,7 @@ function TaskGroupSection({
   accent: 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board';
   defaultCollapsed?: boolean;
   hideWhenEmpty?: boolean;
-  variant?: 'default' | 'today';
+  variant?: 'default' | 'today' | 'board';
 }) {
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
@@ -802,8 +842,12 @@ function TaskGroupSection({
   if (hideWhenEmpty && tasks.length === 0) return null;
 
   return (
-    <section className={`card-section accent-${accent} ${variant === 'today' ? 'today-group-card' : ''}`}>
-      <button type="button" className={`section-heading collapsible-heading ${variant === 'today' ? 'today-group-heading' : ''}`} onClick={() => setCollapsed((prev) => !prev)}>
+    <section className={`card-section accent-${accent} ${variant === 'today' ? 'today-group-card' : ''} ${variant === 'board' ? 'board-group-card' : ''}`}>
+      <button
+        type="button"
+        className={`section-heading collapsible-heading ${variant === 'today' ? 'today-group-heading' : ''} ${variant === 'board' ? 'board-group-heading' : ''}`}
+        onClick={() => setCollapsed((prev) => !prev)}
+      >
         <div className="section-heading-copy">
           <div className="today-group-title-row">
             {variant === 'today' && <span className={`today-group-dot today-group-dot-${accent}`}></span>}
@@ -888,6 +932,77 @@ function PlanDaySection({ group, onOpenTask, index = 0 }: { group: PlanGroup; on
   );
 }
 
+function BoardHero({
+  mode,
+  projects,
+  groups,
+  tasks,
+  onChangeMode,
+}: {
+  mode: BoardMode;
+  projects: ProjectSummary[];
+  groups: Array<DashboardBoardGroup | { key: string; title: string; tasks: Task[] }>;
+  tasks: Task[];
+  onChangeMode: (mode: BoardMode) => void;
+}) {
+  const openCount = tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled').length;
+  const runningCount = tasks.filter((task) => task.status === 'doing').length;
+  const deferredCount = tasks.filter((task) => task.status === 'deferred').length;
+  const emptyGroups = groups.filter((group) => group.tasks.length === 0).length;
+
+  return (
+    <section className="today-hero card-section accent-brand-soft board-hero-compact">
+      <div className="today-hero-main">
+        <div className="today-hero-heading">
+          <span className="topbar-kicker today-hero-kicker">看板视图</span>
+          <h2>{mode === 'status' ? '先看状态，再决定今天先推进哪一摊' : '按项目收线，别让任务在列表里散掉'}</h2>
+          <p>
+            {mode === 'status'
+              ? '先扫推进面，再点进具体事项。保持和今日页一样的工作节奏，而不是像后台表格那样平铺。'
+              : '项目模式更适合做精力分配判断。项目多的时候，往下滑会继续增量加载。'}
+          </p>
+        </div>
+
+        <div className="today-hero-actions board-hero-actions">
+          <button type="button" className={mode === 'status' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('status')}>
+            <span className="hero-action-copy">
+              <span className="hero-action-kicker">分组方式</span>
+              <strong>按状态</strong>
+            </span>
+            <span className="hero-action-glyph">▣</span>
+          </button>
+          <button type="button" className={mode === 'project' ? 'hero-primary-button hero-action-button board-mode-button' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('project')}>
+            <span className="hero-action-copy">
+              <span className="hero-action-kicker">分组方式</span>
+              <strong>按项目</strong>
+            </span>
+            <span className="hero-action-glyph">◫</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="today-priority-strip board-priority-strip" aria-label="看板概览">
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">未收口</span>
+          <strong>{openCount}</strong>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">进行中</span>
+          <strong>{runningCount}</strong>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">已延期</span>
+          <strong>{deferredCount}</strong>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">{mode === 'status' ? '分组' : '项目数'}</span>
+          <strong>{mode === 'status' ? groups.length - emptyGroups : projects.length}</strong>
+        </span>
+      </div>
+    </section>
+  );
+}
+
 function HistoryHero({
   items,
   filters,
@@ -902,53 +1017,100 @@ function HistoryHero({
   const doneCount = items.filter((item) => item.status === 'done').length;
   const changedProjects = Array.from(new Set(items.map((item) => item.project).filter(Boolean))).length;
   const activeFilterCount = [filters.q, filters.status, filters.date].filter(Boolean).length;
+  const latestUpdated = items[0]?.updated_at;
 
   return (
-    <section className="module-hero card-section accent-muted">
-      <div className="module-hero-main">
-        <span className="topbar-kicker">历史回看</span>
-        <h2>{activeFilterCount > 0 ? `当前带着 ${activeFilterCount} 个筛选条件回看` : '最近更新都在这里'}</h2>
-        <p>
-          {activeFilterCount > 0
-            ? '筛选已经生效，下面这批记录更适合带着问题回看。若范围太窄，一键清空会更快。'
-            : '这里不是存档仓库，而是给你快速回忆“最近刚动过哪些事”的地方。'}
-        </p>
-        <div className="today-hero-actions">
-          <button type="button" className="hero-primary-button" onClick={onOpenFilter}>
-            筛选历史
+    <section className="today-hero card-section accent-muted history-hero-compact">
+      <div className="today-hero-main">
+        <div className="today-hero-heading">
+          <span className="topbar-kicker">历史回看</span>
+          <h2>{activeFilterCount > 0 ? `带着 ${activeFilterCount} 个条件回看最近改动` : '把最近动过的事按时间收成一条清晰脉络'}</h2>
+          <p>
+            {activeFilterCount > 0
+              ? '当前结果已经收窄，适合带着问题回看，不需要在长列表里盲翻。'
+              : '这里是快速回忆最近改动的地方，不是沉重的档案柜。'}
+          </p>
+        </div>
+
+        <div className={activeFilterCount > 0 ? 'today-hero-actions history-hero-actions' : 'today-hero-actions history-hero-actions history-hero-actions-single'}>
+          <button type="button" className="hero-primary-button hero-action-button" onClick={onOpenFilter}>
+            <span className="hero-action-copy">
+              <span className="hero-action-kicker">回看工具</span>
+              <strong>调整筛选</strong>
+            </span>
+            <span className="hero-action-glyph">⌕</span>
           </button>
           {activeFilterCount > 0 && (
-            <button type="button" className="hero-secondary-button" onClick={onResetFilters}>
-              清空筛选
+            <button type="button" className="hero-secondary-button hero-action-button" onClick={onResetFilters}>
+              <span className="hero-action-copy">
+                <span className="hero-action-kicker">快速恢复</span>
+                <strong>清空条件</strong>
+              </span>
+              <span className="hero-action-glyph">↺</span>
             </button>
           )}
         </div>
+
+        {(filters.q || filters.status || filters.date) && (
+          <div className="history-filter-strip" aria-label="当前筛选条件">
+            {filters.q && <span className="history-filter-pill">关键词：{filters.q}</span>}
+            {filters.status && <span className="history-filter-pill">状态：{statusLabelMap[filters.status as TaskStatus] || filters.status}</span>}
+            {filters.date && <span className="history-filter-pill">日期：{filters.date}</span>}
+          </div>
+        )}
       </div>
-      <div className="today-stat-grid">
-        <div className="today-stat-card">
-          <span>当前结果</span>
+
+      <div className="today-priority-strip history-priority-strip">
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">当前结果</span>
           <strong>{items.length}</strong>
-        </div>
-        <div className="today-stat-card today-stat-card-warning">
-          <span>已完成</span>
+        </span>
+        <span className="today-priority-chip today-priority-chip-success">
+          <span className="today-priority-chip-label">已完成</span>
           <strong>{doneCount}</strong>
-        </div>
-        <div className="today-stat-card">
-          <span>涉及项目</span>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">涉及项目</span>
           <strong>{changedProjects}</strong>
-        </div>
-        <div className="today-stat-card">
-          <span>筛选数</span>
-          <strong>{activeFilterCount}</strong>
-        </div>
+        </span>
+        <span className="today-priority-chip">
+          <span className="today-priority-chip-label">最近更新</span>
+          <strong>{latestUpdated ? formatDateTime(latestUpdated) : '暂无'}</strong>
+        </span>
       </div>
     </section>
   );
 }
 
-function BoardMeta({ mode, projects }: { mode: BoardMode; projects: ProjectSummary[] }) {
-  const meta = mode === 'status' ? '默认单列分组，先看状态，再看具体活儿。' : `项目数 ${projects.length} · 单列项目分组`;
-  return <div className="helper-text">{meta}</div>;
+function HistoryDaySection({
+  title,
+  tasks,
+  total,
+  onOpenTask,
+  showTotal = false,
+}: {
+  title: string;
+  tasks: Task[];
+  total: number;
+  onOpenTask: (task: Task) => void;
+  showTotal?: boolean;
+}) {
+  return (
+    <section className="history-day card-section accent-muted">
+      <div className="section-heading history-day-heading">
+        <div className="section-heading-copy">
+          <strong>{title}</strong>
+          <span>{showTotal ? `共 ${total} 项记录，先看最近这一批。` : '按最近更新时间倒序，方便快速回想当时做了什么。'}</span>
+        </div>
+        <div className="section-heading-side">
+          <span className="section-count-badge">{tasks.length} 项</span>
+        </div>
+      </div>
+      <div className="task-list history-task-list">
+        {tasks.map((task) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} showUpdated />)}
+      </div>
+    </section>
+  );
 }
 
 function TaskRow({ task, onClick, showUpdated = false }: { task: Task; onClick: () => void; showUpdated?: boolean }) {
@@ -1005,11 +1167,11 @@ function TaskDetailSheet({
             <h2>{task.title}</h2>
             <div className="detail-grid">
               <DetailItem label="状态" value={statusLabelMap[task.status]} />
-              <DetailItem label="时间" value={formatDateTime(getTaskScheduleAt(task))} />
+              <DetailItem label="安排时间" value={formatDateTime(getTaskScheduleAt(task))} />
               <DetailItem label="项目" value={task.project || '未分项目'} />
-              <DetailItem label="更新" value={formatDateTime(task.updated_at)} />
+              <DetailItem label="最近更新" value={formatDateTime(task.updated_at)} />
               <DetailItem label="周期" value={task.recurrence?.enabled ? describeRecurrence(task.recurrence) : '单次提醒'} />
-              <DetailItem label="下次执行" value={task.recurrence?.next_run_at ? formatDateTime(task.recurrence.next_run_at) : formatDateTime(getTaskScheduleAt(task))} />
+              {task.recurrence?.enabled && task.recurrence?.next_run_at && <DetailItem label="下次执行" value={formatDateTime(task.recurrence.next_run_at)} />}
             </div>
             {task.recurrence?.enabled && <div className="helper-text recurrence-helper">{describeRecurrenceMeta(task.recurrence)}</div>}
             <div className="detail-text">
@@ -1154,7 +1316,6 @@ function TaskEditorSheet({
                 <span className="editor-label">状态</span>
                 <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as TaskStatus })}>
                   <option value="todo">待办</option>
-                  <option value="doing">进行中</option>
                   <option value="deferred">已延期</option>
                   <option value="done">已完成</option>
                   <option value="canceled">已取消</option>

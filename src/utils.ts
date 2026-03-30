@@ -1,5 +1,7 @@
 import { PlanGroup, Task, TaskRecurrence, TaskStatus } from './types';
 
+export const APP_TIME_ZONE = 'Asia/Shanghai';
+
 export const statusLabelMap: Record<TaskStatus, string> = {
   todo: '待办',
   doing: '进行中',
@@ -18,11 +20,29 @@ const weekdayLabelMap: Record<number, string> = {
   7: '周日',
 };
 
+function makeDatePartsFormatter() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+}
+
+export function currentDateKey(date = new Date()) {
+  const parts = makeDatePartsFormatter().formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : date.toISOString().slice(0, 10);
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return '未设置';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: APP_TIME_ZONE,
     month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
@@ -35,6 +55,7 @@ export function formatDateLabel(value?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: APP_TIME_ZONE,
     month: 'long',
     day: 'numeric',
     weekday: 'short',
@@ -62,28 +83,26 @@ export function isOverdueTask(task: Task, now = Date.now()) {
   return isOpenTask(task) && Boolean(task.due_at) && new Date(task.due_at as string).getTime() < now;
 }
 
-export function isDueTodayTask(task: Task, date = new Date().toISOString().slice(0, 10)) {
+export function isDueTodayTask(task: Task, date = currentDateKey()) {
   return isOpenTask(task) && task.due_at?.slice(0, 10) === date;
 }
 
-export function groupTodayTasks(tasks: Task[], date = new Date().toISOString().slice(0, 10)) {
+export function groupTodayTasks(tasks: Task[], date = currentDateKey()) {
   const now = Date.now();
-  const overdue = sortTasksByDue(tasks.filter((task) => isOverdueTask(task, now) && task.due_at?.slice(0, 10) !== date));
+  const overdue = sortTasksByDue(tasks.filter((task) => isOverdueTask(task, now)));
   const dueToday = sortTasksByDue(tasks.filter((task) => isDueTodayTask(task, date) && !isOverdueTask(task, now)));
-  const doing = sortTasksByDue(tasks.filter((task) => task.status === 'doing' && !overdue.some((item) => item.id === task.id) && !dueToday.some((item) => item.id === task.id)));
   const later = sortTasksByDue(
     tasks.filter(
       (task) =>
         task.status !== 'done' &&
         task.status !== 'canceled' &&
         !overdue.some((item) => item.id === task.id) &&
-        !dueToday.some((item) => item.id === task.id) &&
-        !doing.some((item) => item.id === task.id),
+        !dueToday.some((item) => item.id === task.id),
     ),
   );
   const completed = sortTasksByUpdated(tasks.filter((task) => task.status === 'done'));
 
-  return { overdue, dueToday, doing, later, completed };
+  return { overdue, dueToday, later, completed };
 }
 
 export function fallbackPlanGroups(tasks: Task[]): PlanGroup[] {
