@@ -911,8 +911,8 @@ function PlanHero({ groups }: { groups: PlanGroup[] }) {
           <h2>{nextGroup ? `${nextGroup.title} · ${nextGroup.tasks.length} 项` : '计划已经排得很空'}</h2>
           <p>
             {nextGroup
-              ? '按时间顺序排布，适合提前看后面的节奏。未排期的任务单独收口，不和日程混在一起。'
-              : '临时想到事可以直接新建，再补时间。'}
+              ? '先看后面几天怎么排，再决定今天要不要提前动手。'
+              : '临时想到事，先记进来，时间后面再补。'}
           </p>
         </div>
       </div>
@@ -1052,11 +1052,11 @@ function HistoryHero({
       <div className="today-hero-main">
         <div className="today-hero-heading">
           <span className="topbar-kicker">历史回看</span>
-          <h2>{activeFilterCount > 0 ? `带着 ${activeFilterCount} 个条件回看最近改动` : '快速回想最近改过什么，不用在长列表里盲翻'}</h2>
+          <h2>{activeFilterCount > 0 ? `带着 ${activeFilterCount} 个条件回看最近改动` : '把最近动过的事快速找回来'}</h2>
           <p>
             {activeFilterCount > 0
-              ? '范围已经收窄了，适合带着问题回看：这两天改了什么、某个事项为什么变成现在这样。'
-              : '当你只想找回最近几天的处理痕迹，这里应该比翻聊天和翻详情都更省心。'}
+              ? '范围已经收窄，适合带着问题回看。'
+              : '想回想最近几天改了什么，这里会比盲翻更快。'}
           </p>
         </div>
 
