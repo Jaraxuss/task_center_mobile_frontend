@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData } from './hooks';
 import { DashboardBoardGroup, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
-import { APP_TIME_ZONE, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
+import { APP_TIME_ZONE, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
 type BoardMode = 'status' | 'project';
@@ -253,6 +253,7 @@ function App() {
   const [historyDraft, setHistoryDraft] = useState(initialRoute.historyDraft);
   const [historyFilters, setHistoryFilters] = useState(initialRoute.historyDraft);
   const [visibleProjectGroupCount, setVisibleProjectGroupCount] = useState(6);
+  const [visibleHistoryGroupCount, setVisibleHistoryGroupCount] = useState(6);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
@@ -261,6 +262,7 @@ function App() {
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
+  const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const today = useAsyncData(() => api.getTodayDashboard(), [], activeTab === 'today' || activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
@@ -277,6 +279,10 @@ function App() {
   const visibleProjectGroups = useMemo(() => boardProjectGroups.slice(0, visibleProjectGroupCount), [boardProjectGroups, visibleProjectGroupCount]);
   const boardGroups = boardMode === 'status' ? boardStatusGroups : visibleProjectGroups;
   const hasMoreProjectGroups = boardMode === 'project' && visibleProjectGroupCount < boardProjectGroups.length;
+  const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
+  const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
+  const visibleHistoryGroups = useMemo(() => historyDateGroups.slice(0, visibleHistoryGroupCount), [historyDateGroups, visibleHistoryGroupCount]);
+  const hasMoreHistoryGroups = visibleHistoryGroupCount < historyDateGroups.length;
 
   useEffect(() => {
     const onHashChange = () => {
@@ -314,6 +320,26 @@ function App() {
     observer.observe(projectLoadMoreRef.current);
     return () => observer.disconnect();
   }, [boardMode, hasMoreProjectGroups, boardProjectGroups.length]);
+
+  useEffect(() => {
+    setVisibleHistoryGroupCount(6);
+  }, [history.data, historyFilters.q, historyFilters.status, historyFilters.date]);
+
+  useEffect(() => {
+    if (!hasMoreHistoryGroups || !historyLoadMoreRef.current) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleHistoryGroupCount((prev) => Math.min(prev + 6, historyDateGroups.length));
+        }
+      },
+      { root: null, rootMargin: '240px 0px 320px 0px', threshold: 0.01 },
+    );
+
+    observer.observe(historyLoadMoreRef.current);
+    return () => observer.disconnect();
+  }, [hasMoreHistoryGroups, historyDateGroups.length]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -461,9 +487,6 @@ function App() {
     if (!todayData) return [] as PlanGroup[];
     return todayData.planGroups?.length ? todayData.planGroups : fallbackPlanGroups(todayData.tasks);
   }, [todayData]);
-  const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
-  const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
-
   const summary = todayData?.summary;
   const projectNames = useMemo(() => (projects.data || []).map((item) => item.name).filter(Boolean), [projects.data]);
 
@@ -565,9 +588,14 @@ function App() {
             {history.loading && !history.loaded && <StateCard text="历史记录加载中…" />}
             {history.error && <StateCard text={history.error} tone="danger" />}
             {!history.loading && !history.error && history.loaded && historyItems.length === 0 && <StateCard text="没有符合条件的历史记录" />}
-            {!history.loading && !history.error && history.loaded && historyDateGroups.map((group) => (
-              <HistoryDaySection key={group.key} title={group.title} tasks={group.tasks} total={history.data?.total || historyItems.length} onOpenTask={openTask} showTotal={group.key === historyDateGroups[0]?.key} />
+            {!history.loading && !history.error && history.loaded && visibleHistoryGroups.map((group) => (
+              <HistoryDaySection key={group.key} title={group.title} tasks={group.tasks} total={history.data?.total || historyItems.length} onOpenTask={openTask} showTotal={group.key === visibleHistoryGroups[0]?.key} />
             ))}
+            {!history.loading && !history.error && history.loaded && hasMoreHistoryGroups && (
+              <div ref={historyLoadMoreRef} className="scroll-load-sentinel" aria-hidden="true">
+                <span className="scroll-load-chip">继续下滑，自动加载更多历史记录</span>
+              </div>
+            )}
           </section>
         )}
       </main>
@@ -955,23 +983,19 @@ function BoardHero({
       <div className="today-hero-main">
         <div className="today-hero-heading">
           <span className="topbar-kicker today-hero-kicker">看板视图</span>
-          <h2>{mode === 'status' ? '先看状态，再决定今天先推进哪一摊' : '按项目收线，别让任务在列表里散掉'}</h2>
-          <p>
-            {mode === 'status'
-              ? '先扫推进面，再点进具体事项。保持和今日页一样的工作节奏，而不是像后台表格那样平铺。'
-              : '项目模式更适合做精力分配判断。项目多的时候，往下滑会继续增量加载。'}
-          </p>
+          <h2>把当前任务面收成一眼能判断轻重缓急的样子</h2>
+          <p>先看今天手上还有多少没收口，再决定是按状态扫一遍，还是按项目集中推进。</p>
         </div>
 
         <div className="today-hero-actions board-hero-actions">
-          <button type="button" className={mode === 'status' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('status')}>
+          <button type="button" aria-pressed={mode === 'status'} className={mode === 'status' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('status')}>
             <span className="hero-action-copy">
               <span className="hero-action-kicker">分组方式</span>
               <strong>按状态</strong>
             </span>
             <span className="hero-action-glyph">▣</span>
           </button>
-          <button type="button" className={mode === 'project' ? 'hero-primary-button hero-action-button board-mode-button' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('project')}>
+          <button type="button" aria-pressed={mode === 'project'} className={mode === 'project' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('project')}>
             <span className="hero-action-copy">
               <span className="hero-action-kicker">分组方式</span>
               <strong>按项目</strong>
@@ -1024,11 +1048,11 @@ function HistoryHero({
       <div className="today-hero-main">
         <div className="today-hero-heading">
           <span className="topbar-kicker">历史回看</span>
-          <h2>{activeFilterCount > 0 ? `带着 ${activeFilterCount} 个条件回看最近改动` : '把最近动过的事按时间收成一条清晰脉络'}</h2>
+          <h2>{activeFilterCount > 0 ? `带着 ${activeFilterCount} 个条件回看最近改动` : '快速回想最近改过什么，不用在长列表里盲翻'}</h2>
           <p>
             {activeFilterCount > 0
-              ? '当前结果已经收窄，适合带着问题回看，不需要在长列表里盲翻。'
-              : '这里是快速回忆最近改动的地方，不是沉重的档案柜。'}
+              ? '范围已经收窄了，适合带着问题回看：这两天改了什么、某个事项为什么变成现在这样。'
+              : '当你只想找回最近几天的处理痕迹，这里应该比翻聊天和翻详情都更省心。'}
           </p>
         </div>
 
@@ -1073,9 +1097,9 @@ function HistoryHero({
           <span className="today-priority-chip-label">涉及项目</span>
           <strong>{changedProjects}</strong>
         </span>
-        <span className="today-priority-chip">
+        <span className="today-priority-chip today-priority-chip-compact-value">
           <span className="today-priority-chip-label">最近更新</span>
-          <strong>{latestUpdated ? formatDateTime(latestUpdated) : '暂无'}</strong>
+          <strong>{latestUpdated ? formatDateTimeShort(latestUpdated) : '暂无'}</strong>
         </span>
       </div>
     </section>

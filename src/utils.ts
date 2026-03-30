@@ -29,6 +29,20 @@ function makeDatePartsFormatter() {
   });
 }
 
+function getNaiveDateTimeParts(value?: string | null) {
+  if (!value) return null;
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2})(?::\d{2}(?:\.\d+)?)?)?$/);
+  if (!match) return null;
+  return {
+    year: match[1],
+    month: String(Number(match[2])),
+    day: String(Number(match[3])),
+    hour: match[4] || '00',
+    minute: match[5] || '00',
+    dateKey: `${match[1]}-${match[2]}-${match[3]}`,
+  };
+}
+
 export function currentDateKey(date = new Date()) {
   const parts = makeDatePartsFormatter().formatToParts(date);
   const year = parts.find((part) => part.type === 'year')?.value;
@@ -39,6 +53,23 @@ export function currentDateKey(date = new Date()) {
 
 export function formatDateTime(value?: string | null) {
   if (!value) return '未设置';
+  const naive = getNaiveDateTimeParts(value);
+  if (naive) return `${naive.month}/${naive.day} ${naive.hour}:${naive.minute}`;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: APP_TIME_ZONE,
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+export function formatDateTimeShort(value?: string | null) {
+  if (!value) return '暂无';
+  const naive = getNaiveDateTimeParts(value);
+  if (naive) return `${naive.month}/${naive.day} ${naive.hour}:${naive.minute}`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {
@@ -52,6 +83,12 @@ export function formatDateTime(value?: string | null) {
 
 export function formatDateLabel(value?: string | null) {
   if (!value) return '未安排';
+  const naive = getNaiveDateTimeParts(value);
+  if (naive) {
+    const date = new Date(`${naive.dateKey}T00:00:00+08:00`);
+    const weekday = new Intl.DateTimeFormat('zh-CN', { timeZone: APP_TIME_ZONE, weekday: 'short' }).format(date);
+    return `${Number(naive.month)}月${Number(naive.day)}日 ${weekday}`;
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('zh-CN', {

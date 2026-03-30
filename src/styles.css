@@ -490,6 +490,15 @@ button {
   padding: 10px 12px;
 }
 
+.board-mode-button[aria-pressed='true'] {
+  border-color: rgba(49, 87, 225, 0.2);
+  box-shadow: 0 10px 20px rgba(49, 87, 225, 0.1);
+}
+
+.board-mode-button[aria-pressed='false'] {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(247, 250, 255, 0.94));
+}
+
 .board-mode-button .hero-action-kicker,
 .history-hero-actions .hero-action-kicker {
   font-size: 9px;
@@ -504,11 +513,22 @@ button {
 
 .board-mode-button-active {
   border-color: rgba(49, 87, 225, 0.18);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(243, 248, 255, 0.96));
 }
 
 .board-priority-strip,
 .history-priority-strip {
   gap: 8px;
+}
+
+.history-priority-strip .today-priority-chip {
+  min-height: 70px;
+}
+
+.today-priority-chip-compact-value strong {
+  font-size: 16px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 .history-filter-strip {
