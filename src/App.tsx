@@ -1099,7 +1099,7 @@ function HistoryHero({
         </span>
         <span className="today-priority-chip today-priority-chip-compact-value">
           <span className="today-priority-chip-label">最近更新</span>
-          <strong>{latestUpdated ? formatDateTimeShort(latestUpdated) : '暂无'}</strong>
+          <strong className="today-priority-chip-time">{latestUpdated ? formatDateTimeShort(latestUpdated) : '暂无'}</strong>
         </span>
       </div>
     </section>
