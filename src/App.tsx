@@ -983,24 +983,28 @@ function BoardHero({
       <div className="today-hero-main">
         <div className="today-hero-heading">
           <span className="topbar-kicker today-hero-kicker">看板视图</span>
-          <h2>把当前任务面收成一眼能判断轻重缓急的样子</h2>
-          <p>先看今天手上还有多少没收口，再决定是按状态扫一遍，还是按项目集中推进。</p>
+          <h2>看清现在手上的任务面</h2>
+          <p>按状态快速扫盘，或按项目集中收线。</p>
         </div>
 
-        <div className="today-hero-actions board-hero-actions">
-          <button type="button" aria-pressed={mode === 'status'} className={mode === 'status' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('status')}>
-            <span className="hero-action-copy">
-              <span className="hero-action-kicker">分组方式</span>
-              <strong>按状态</strong>
-            </span>
-            <span className="hero-action-glyph">▣</span>
+        <div className="board-segmented" role="tablist" aria-label="看板分组方式">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'status'}
+            className={mode === 'status' ? 'board-segment board-segment-active' : 'board-segment'}
+            onClick={() => onChangeMode('status')}
+          >
+            按状态
           </button>
-          <button type="button" aria-pressed={mode === 'project'} className={mode === 'project' ? 'hero-secondary-button hero-action-button board-mode-button board-mode-button-active' : 'hero-secondary-button hero-action-button board-mode-button'} onClick={() => onChangeMode('project')}>
-            <span className="hero-action-copy">
-              <span className="hero-action-kicker">分组方式</span>
-              <strong>按项目</strong>
-            </span>
-            <span className="hero-action-glyph">◫</span>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={mode === 'project'}
+            className={mode === 'project' ? 'board-segment board-segment-active' : 'board-segment'}
+            onClick={() => onChangeMode('project')}
+          >
+            按项目
           </button>
         </div>
       </div>
