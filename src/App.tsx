@@ -10,7 +10,7 @@ type TaskActionType = 'complete' | 'reschedule' | 'defer' | 'cancel';
 type TaskFormMode = 'create' | 'edit';
 
 interface ActionSheetState {
-  type: Exclude<TaskActionType, 'complete'>;
+  type: TaskActionType;
   datetime: string;
   reason: string;
 }
@@ -222,7 +222,7 @@ function getHistoryDateGroups(tasks: Task[]) {
 function makeOptimisticTask(task: Task, type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
   const now = localNowString();
   if (type === 'complete') {
-    return { ...task, status: 'done' as TaskStatus, completed_at: now, canceled_at: null, updated_at: now };
+    return { ...task, status: 'done' as TaskStatus, completed_at: now, completion_note: payload?.reason ?? task.completion_note ?? null, canceled_at: null, updated_at: now };
   }
   if (type === 'reschedule') {
     return { ...task, due_at: payload?.due_at ?? task.due_at ?? null, updated_at: now };
@@ -414,7 +414,7 @@ function App() {
 
     try {
       let updated: Task;
-      if (type === 'complete') updated = await api.completeTask(selectedTask.id);
+      if (type === 'complete') updated = await api.completeTask(selectedTask.id, { note: payload?.reason || undefined });
       else if (type === 'reschedule') updated = await api.updateTask(selectedTask.id, { due_at: payload?.due_at ?? null });
       else if (type === 'defer') updated = await api.deferTask(selectedTask.id, { deferred_to: payload?.deferred_to || '', due_at: payload?.due_at || undefined, reason: payload?.reason });
       else updated = await api.cancelTask(selectedTask.id, payload?.reason || undefined);
@@ -622,14 +622,10 @@ function App() {
             setActionSheet(null);
           }}
           onAction={(type) => {
-            if (type === 'complete') {
-              void runTaskAction('complete');
-              return;
-            }
             setActionSheet({
               type,
               datetime: formatDateTimeInput(type === 'defer' ? selectedTask.deferred_to || selectedTask.due_at : selectedTask.due_at),
-              reason: '',
+              reason: type === 'complete' ? selectedTask.completion_note || '' : '',
             });
           }}
           onEdit={() => {
@@ -647,6 +643,10 @@ function App() {
           onChange={setActionSheet}
           onClose={() => setActionSheet(null)}
           onSubmit={() => {
+            if (actionSheet.type === 'complete') {
+              void runTaskAction('complete', { reason: actionSheet.reason.trim() || undefined });
+              return;
+            }
             if (actionSheet.type === 'reschedule') {
               const dueAt = toIsoOrNull(actionSheet.datetime);
               if (!dueAt) {
@@ -1204,6 +1204,12 @@ function TaskDetailSheet({
               {task.recurrence?.enabled && task.recurrence?.next_run_at && <DetailItem label="下次执行" value={formatDateTime(task.recurrence.next_run_at)} />}
             </div>
             {task.recurrence?.enabled && <div className="helper-text recurrence-helper">{describeRecurrenceMeta(task.recurrence)}</div>}
+            {task.completion_note && (
+              <div className="detail-text">
+                <div className="detail-label">最近一次跟进结果</div>
+                <p>{task.completion_note}</p>
+              </div>
+            )}
             <div className="detail-text">
               <div className="detail-label">描述</div>
               <p>{task.description || '暂无描述'}</p>
@@ -1252,8 +1258,8 @@ function TaskActionSheet({
   onClose: () => void;
   onSubmit: () => void;
 }) {
-  const title = state.type === 'reschedule' ? '改时间' : state.type === 'defer' ? '延期任务' : '取消任务';
-  const submitLabel = state.type === 'reschedule' ? '保存时间' : state.type === 'defer' ? '确认延期' : '确认取消';
+  const title = state.type === 'complete' ? '标记完成' : state.type === 'reschedule' ? '改时间' : state.type === 'defer' ? '延期任务' : '取消任务';
+  const submitLabel = state.type === 'complete' ? '确认完成' : state.type === 'reschedule' ? '保存时间' : state.type === 'defer' ? '确认延期' : '确认取消';
 
   return (
     <div className="overlay">
@@ -1272,10 +1278,10 @@ function TaskActionSheet({
               <input type="datetime-local" value={state.datetime} onChange={(event) => onChange({ ...state, datetime: event.target.value })} />
             </label>
           )}
-          {(state.type === 'defer' || state.type === 'cancel') && (
+          {(state.type === 'complete' || state.type === 'defer' || state.type === 'cancel') && (
             <label>
-              <span>{state.type === 'cancel' ? '取消原因（可选）' : '延期说明（可选）'}</span>
-              <textarea rows={4} value={state.reason} onChange={(event) => onChange({ ...state, reason: event.target.value })} placeholder="填一点上下文，后面回看不容易失忆。" />
+              <span>{state.type === 'complete' ? '跟进结果（可选）' : state.type === 'cancel' ? '取消原因（可选）' : '延期说明（可选）'}</span>
+              <textarea rows={4} value={state.reason} onChange={(event) => onChange({ ...state, reason: event.target.value })} placeholder={state.type === 'complete' ? '比如使用情况、反馈、问题原因、下一步判断。' : '填一点上下文，后面回看不容易失忆。'} />
             </label>
           )}
         </div>
