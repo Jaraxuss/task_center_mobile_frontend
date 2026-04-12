@@ -75,6 +75,13 @@ export interface DashboardToday {
   planGroups: PlanGroup[];
 }
 
+export interface DashboardPlan {
+  date: string;
+  total: number;
+  open_count: number;
+  planGroups: PlanGroup[];
+}
+
 export interface DashboardBoardGroup {
   key: string;
   title: string;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData } from './hooks';
-import { DashboardBoardGroup, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
+import { DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
 import { APP_TIME_ZONE, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
@@ -264,7 +264,8 @@ function App() {
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const today = useAsyncData(() => api.getTodayDashboard(), [], activeTab === 'today' || activeTab === 'plan');
+  const today = useAsyncData(() => api.getTodayDashboard(), [], activeTab === 'today');
+  const plan = useAsyncData(() => api.getPlanDashboard(), [], activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
@@ -391,7 +392,8 @@ function App() {
 
   async function refreshVisibleData() {
     const jobs: Array<Promise<unknown>> = [];
-    if (activeTab === 'today' || activeTab === 'plan') jobs.push(today.refresh());
+    if (activeTab === 'today') jobs.push(today.refresh());
+    if (activeTab === 'plan') jobs.push(plan.refresh());
     if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
@@ -473,7 +475,7 @@ function App() {
       setSelectedTask(updated);
       setEditorMode(null);
       setToast({ text: editorMode === 'create' ? '任务已创建' : '任务已保存', tone: 'success' });
-      await Promise.all([today.refresh(), board.refresh(), allTasks.refresh(), history.refresh(), projects.refresh()]);
+      await Promise.all([today.refresh(), plan.refresh(), board.refresh(), allTasks.refresh(), history.refresh(), projects.refresh()]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '保存失败', tone: 'danger' });
     } finally {
@@ -482,11 +484,12 @@ function App() {
   }
 
   const todayData = today.data;
+  const planData = plan.data;
   const todayGroups = useMemo(() => groupTodayTasks(todayData?.tasks || [], todayData?.date), [todayData]);
   const planGroups = useMemo(() => {
-    if (!todayData) return [] as PlanGroup[];
-    return todayData.planGroups?.length ? todayData.planGroups : fallbackPlanGroups(todayData.tasks);
-  }, [todayData]);
+    if (!planData) return [] as PlanGroup[];
+    return planData.planGroups || [];
+  }, [planData]);
   const summary = todayData?.summary;
   const projectNames = useMemo(() => (projects.data || []).map((item) => item.name).filter(Boolean), [projects.data]);
 
@@ -524,10 +527,10 @@ function App() {
         {activeTab === 'plan' && (
           <section className="page">
             <PlanHero groups={planGroups} />
-            {today.loading && !today.loaded && <StateCard text="正在加载计划视图…" />}
-            {today.error && <StateCard text={today.error} tone="danger" />}
-            {!today.loading && !today.error && today.loaded && planGroups.length === 0 && <StateCard text="当前没有计划任务" />}
-            {!today.loading && !today.error && planGroups.map((group: PlanGroup, index: number) => <PlanDaySection key={group.key} group={group} onOpenTask={openTask} index={index} />)}
+            {plan.loading && !plan.loaded && <StateCard text="正在加载计划视图…" />}
+            {plan.error && <StateCard text={plan.error} tone="danger" />}
+            {!plan.loading && !plan.error && plan.loaded && planGroups.length === 0 && <StateCard text="当前没有未来事项" />}
+            {!plan.loading && !plan.error && planGroups.map((group: PlanGroup, index: number) => <PlanDaySection key={group.key} group={group} onOpenTask={openTask} index={index} />)}
           </section>
         )}
 
