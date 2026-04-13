@@ -1166,6 +1166,17 @@ function StatusPill({ status }: { status: Task['status'] }) {
   return <span className={`status-pill status-${status}`}>{statusLabelMap[status]}</span>;
 }
 
+function getLatestFollowupResult(task: Task) {
+  if (task.completion_note?.trim()) return task.completion_note.trim();
+  const events = task.events || [];
+  for (const event of events) {
+    const note = typeof event.payload?.note === 'string' ? event.payload.note.trim() : '';
+    if (!note) continue;
+    if (event.event_type === 'completed' || event.event_type === 'recurrence_advanced') return note;
+  }
+  return '';
+}
+
 function TaskDetailSheet({
   task,
   loading,
@@ -1181,6 +1192,8 @@ function TaskDetailSheet({
   onAction: (type: TaskActionType) => void;
   onEdit: () => void;
 }) {
+  const latestFollowupResult = getLatestFollowupResult(task);
+
   return (
     <div className="overlay">
       <div className="sheet detail-sheet">
@@ -1195,6 +1208,12 @@ function TaskDetailSheet({
         <div className="detail-body">
           <div className={loading ? 'detail-card detail-card-loading' : 'detail-card'}>
             <h2>{task.title}</h2>
+            {latestFollowupResult && (
+              <div className="detail-text">
+                <div className="detail-label">{task.status === 'done' ? '本次跟进结果' : '最近一次跟进结果'}</div>
+                <p>{latestFollowupResult}</p>
+              </div>
+            )}
             <div className="detail-grid">
               <DetailItem label="状态" value={statusLabelMap[task.status]} />
               <DetailItem label="安排时间" value={formatDateTime(getTaskScheduleAt(task))} />
@@ -1204,12 +1223,6 @@ function TaskDetailSheet({
               {task.recurrence?.enabled && task.recurrence?.next_run_at && <DetailItem label="下次执行" value={formatDateTime(task.recurrence.next_run_at)} />}
             </div>
             {task.recurrence?.enabled && <div className="helper-text recurrence-helper">{describeRecurrenceMeta(task.recurrence)}</div>}
-            {task.completion_note && (
-              <div className="detail-text">
-                <div className="detail-label">最近一次跟进结果</div>
-                <p>{task.completion_note}</p>
-              </div>
-            )}
             <div className="detail-text">
               <div className="detail-label">描述</div>
               <p>{task.description || '暂无描述'}</p>
