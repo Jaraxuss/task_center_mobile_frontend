@@ -51,6 +51,26 @@ export function currentDateKey(date = new Date()) {
   return year && month && day ? `${year}-${month}-${day}` : date.toISOString().slice(0, 10);
 }
 
+export function getDateKey(value?: string | null) {
+  if (!value) return null;
+  const naive = getNaiveDateTimeParts(value);
+  if (naive) return naive.dateKey;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = makeDatePartsFormatter().formatToParts(date);
+  const year = parts.find((part) => part.type === 'year')?.value;
+  const month = parts.find((part) => part.type === 'month')?.value;
+  const day = parts.find((part) => part.type === 'day')?.value;
+  return year && month && day ? `${year}-${month}-${day}` : null;
+}
+
+export function toDateMillis(value?: string | null) {
+  if (!value) return Number.NaN;
+  const naive = getNaiveDateTimeParts(value);
+  if (naive) return new Date(`${naive.dateKey}T${naive.hour}:${naive.minute}:00+08:00`).getTime();
+  return new Date(value).getTime();
+}
+
 export function formatDateTime(value?: string | null) {
   if (!value) return '未设置';
   const naive = getNaiveDateTimeParts(value);
@@ -101,15 +121,15 @@ export function formatDateLabel(value?: string | null) {
 
 export function sortTasksByDue(tasks: Task[]) {
   return [...tasks].sort((a, b) => {
-    const aTime = a.due_at ? new Date(a.due_at).getTime() : Number.MAX_SAFE_INTEGER;
-    const bTime = b.due_at ? new Date(b.due_at).getTime() : Number.MAX_SAFE_INTEGER;
+    const aTime = a.due_at ? toDateMillis(a.due_at) : Number.MAX_SAFE_INTEGER;
+    const bTime = b.due_at ? toDateMillis(b.due_at) : Number.MAX_SAFE_INTEGER;
     if (aTime !== bTime) return aTime - bTime;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+    return toDateMillis(b.updated_at) - toDateMillis(a.updated_at);
   });
 }
 
 export function sortTasksByUpdated(tasks: Task[]) {
-  return [...tasks].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+  return [...tasks].sort((a, b) => toDateMillis(b.updated_at) - toDateMillis(a.updated_at));
 }
 
 export function isOpenTask(task: Task) {
@@ -117,11 +137,11 @@ export function isOpenTask(task: Task) {
 }
 
 export function isOverdueTask(task: Task, now = Date.now()) {
-  return isOpenTask(task) && Boolean(task.due_at) && new Date(task.due_at as string).getTime() < now;
+  return isOpenTask(task) && Boolean(task.due_at) && toDateMillis(task.due_at as string) < now;
 }
 
 export function isDueTodayTask(task: Task, date = currentDateKey()) {
-  return isOpenTask(task) && task.due_at?.slice(0, 10) === date;
+  return isOpenTask(task) && getDateKey(task.due_at) === date;
 }
 
 export function groupTodayTasks(tasks: Task[], date = currentDateKey()) {
@@ -145,7 +165,7 @@ export function groupTodayTasks(tasks: Task[], date = currentDateKey()) {
 export function fallbackPlanGroups(tasks: Task[]): PlanGroup[] {
   const map = new Map<string, Task[]>();
   tasks.forEach((task) => {
-    const key = task.due_at?.slice(0, 10) || 'unscheduled';
+    const key = getDateKey(task.due_at) || 'unscheduled';
     const list = map.get(key) || [];
     list.push(task);
     map.set(key, list);

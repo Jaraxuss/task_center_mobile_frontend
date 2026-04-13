@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData } from './hooks';
 import { DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
-import { APP_TIME_ZONE, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap } from './utils';
+import { APP_TIME_ZONE, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
 type BoardMode = 'status' | 'project';
@@ -78,14 +78,24 @@ function formatDateTimeInput(value?: string | null) {
   if (withSecondsMatch) return withSecondsMatch[1];
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '';
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
 }
 
 function toIsoOrNull(value: string) {
   if (!value) return null;
   const normalized = value.trim().replace(' ', 'T');
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return null;
-  return `${normalized}:00`;
+  return new Date(`${normalized}:00+08:00`).toISOString();
 }
 
 function localNowString() {
@@ -180,7 +190,10 @@ function buildHash(tab: TabKey, boardMode: BoardMode, historyFilters: { q: strin
 
 function regroupPlanGroups(groups: PlanGroup[], updated: Task) {
   const all = groups.flatMap((group) => group.tasks).filter((task, index, list) => list.findIndex((item) => item.id === task.id) === index && task.id !== updated.id);
-  if (updated.status !== 'done' && updated.status !== 'canceled') all.push(updated);
+  const scheduleDate = getDateKey(updated.deferred_to || updated.due_at);
+  if (updated.status !== 'done' && updated.status !== 'canceled' && scheduleDate && scheduleDate > currentDateKey()) {
+    all.push(updated);
+  }
   return fallbackPlanGroups(all);
 }
 
@@ -204,7 +217,7 @@ function upsertTask(list: Task[], updated: Task) {
 function getHistoryDateGroups(tasks: Task[]) {
   const map = new Map<string, Task[]>();
   tasks.forEach((task) => {
-    const key = task.updated_at?.slice(0, 10) || 'unknown';
+    const key = getDateKey(task.updated_at) || 'unknown';
     const list = map.get(key) || [];
     list.push(task);
     map.set(key, list);
@@ -376,12 +389,19 @@ function App() {
       const summary = {
         ...prev.summary,
         total: tasks.length,
-        dueToday: tasks.filter((task) => task.due_at?.slice(0, 10) === prev.date).length,
-        overdue: tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled' && task.due_at && new Date(task.due_at).getTime() < Date.now()).length,
+        dueToday: tasks.filter((task) => getDateKey(task.due_at) === prev.date).length,
+        overdue: tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled' && task.due_at && toDateMillis(task.due_at) < Date.now()).length,
         completed: tasks.filter((task) => task.status === 'done').length,
         open: tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled').length,
       };
-      return { ...prev, tasks, summary, planGroups: regroupPlanGroups(prev.planGroups, updated) };
+      return { ...prev, tasks, summary, planGroups: prev.planGroups };
+    });
+
+    plan.setData((prev: DashboardPlan | null) => {
+      if (!prev) return prev;
+      const groups = regroupPlanGroups(prev.planGroups, updated);
+      const total = groups.reduce((sum, group) => sum + group.tasks.length, 0);
+      return { ...prev, planGroups: groups, total, open_count: total };
     });
 
     board.setData((prev) => (prev ? { ...prev, groups: regroupBoardStatusGroups(prev.groups, updated) } : prev));
