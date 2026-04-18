@@ -6,6 +6,7 @@ import {
   DashboardToday,
   DeferTaskPayload,
   HistoryResponse,
+  BoardPreferences,
   ProjectSummary,
   Task,
   TaskEvent,
@@ -264,6 +265,27 @@ export const api = {
           }))
         : []
     ) satisfies ProjectSummary[];
+  },
+  getBoardPreferences: async () => {
+    const response = await request<any>('/api/preferences/board');
+    return {
+      task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
+      pinned_projects: Array.isArray(response?.pinned_projects)
+        ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [],
+    } satisfies BoardPreferences;
+  },
+  updateBoardPreferences: async (payload: Partial<BoardPreferences>) => {
+    const response = await request<any>('/api/preferences/board', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
+    return {
+      task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
+      pinned_projects: Array.isArray(response?.pinned_projects)
+        ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [],
+    } satisfies BoardPreferences;
   },
   updateTask: async (id: number, payload: UpdateTaskPayload) =>
     normalizeTask(

@@ -101,6 +101,11 @@ export interface ProjectSummary {
   done_task_count: number;
 }
 
+export interface BoardPreferences {
+  task_order: number[];
+  pinned_projects: string[];
+}
+
 export interface HistoryResponse {
   items: Task[];
   total: number;

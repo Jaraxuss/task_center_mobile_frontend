@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
-import { useAsyncData } from './hooks';
-import { DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
+import { useAsyncData, usePersistentState } from './hooks';
+import { BoardPreferences, DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
 import { APP_TIME_ZONE, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
@@ -214,6 +214,51 @@ function upsertTask(list: Task[], updated: Task) {
   return sortTasksByUpdated(next);
 }
 
+function sortTasksWithPreference(tasks: Task[], taskOrder: number[]) {
+  const orderMap = new Map(taskOrder.map((taskId, index) => [taskId, index]));
+  return [...tasks].sort((a, b) => {
+    const aIndex = orderMap.get(a.id);
+    const bIndex = orderMap.get(b.id);
+    if (aIndex != null || bIndex != null) {
+      if (aIndex != null && bIndex != null) return aIndex - bIndex;
+      return aIndex != null ? -1 : 1;
+    }
+    const byDue = sortTasksByDue([a, b]);
+    return byDue[0]?.id === a.id ? -1 : 1;
+  });
+}
+
+function sortProjectGroupsWithPreference(groups: Array<{ key: string; title: string; tasks: Task[] }>, pinnedProjects: string[]) {
+  const pinnedMap = new Map(pinnedProjects.map((name, index) => [name, index]));
+  return [...groups].sort((a, b) => {
+    const aPinned = pinnedMap.has(a.title);
+    const bPinned = pinnedMap.has(b.title);
+    if (aPinned || bPinned) {
+      if (aPinned && bPinned) return (pinnedMap.get(a.title) || 0) - (pinnedMap.get(b.title) || 0);
+      return aPinned ? -1 : 1;
+    }
+    return a.title.localeCompare(b.title, 'zh-CN');
+  });
+}
+
+function buildTaskOrderPayload(tasks: Task[], currentOrder: number[], movingTaskId: number, direction: 'up' | 'down') {
+  const visibleIds = tasks.map((task) => task.id);
+  const preferredVisible = currentOrder.filter((taskId) => visibleIds.includes(taskId));
+  const remainingVisible = visibleIds.filter((taskId) => !preferredVisible.includes(taskId));
+  const orderedVisible = [...preferredVisible, ...remainingVisible];
+  const currentIndex = orderedVisible.indexOf(movingTaskId);
+  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedVisible.length) return currentOrder;
+
+  const nextVisible = [...orderedVisible];
+  const [moving] = nextVisible.splice(currentIndex, 1);
+  nextVisible.splice(targetIndex, 0, moving);
+
+  const preservedHidden = currentOrder.filter((taskId) => !visibleIds.includes(taskId));
+  return [...nextVisible, ...preservedHidden];
+}
+
 function getHistoryDateGroups(tasks: Task[]) {
   const map = new Map<string, Task[]>();
   tasks.forEach((task) => {
@@ -262,6 +307,7 @@ function App() {
   const initialRoute = parseRouteState();
   const [activeTab, setActiveTab] = useState<TabKey>(initialRoute.tab);
   const [boardMode, setBoardMode] = useState<BoardMode>(initialRoute.boardMode);
+  const [theme, setTheme] = usePersistentState<'light' | 'dark'>('task-center-mobile-theme', 'light');
   const [showHistoryFilter, setShowHistoryFilter] = useState(false);
   const [historyDraft, setHistoryDraft] = useState(initialRoute.historyDraft);
   const [historyFilters, setHistoryFilters] = useState(initialRoute.historyDraft);
@@ -274,6 +320,8 @@ function App() {
   const [actionSheet, setActionSheet] = useState<ActionSheetState | null>(null);
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
+  const [boardProjectQuery, setBoardProjectQuery] = useState('');
+  const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([]);
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -282,17 +330,32 @@ function App() {
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
+  const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const history = useAsyncData(
     () => api.getHistoryDashboard({ q: historyFilters.q || undefined, status: historyFilters.status || undefined, date: historyFilters.date || undefined }),
     [historyFilters.q, historyFilters.status, historyFilters.date],
     activeTab === 'history',
   );
 
-  const boardStatusGroups = board.data?.groups || [];
-  const boardProjectGroups = useMemo(() => groupTasksByProject(allTasks.data || []), [allTasks.data]);
-  const visibleProjectGroups = useMemo(() => boardProjectGroups.slice(0, visibleProjectGroupCount), [boardProjectGroups, visibleProjectGroupCount]);
+  const boardPreferenceData: BoardPreferences = boardPreferences.data || { task_order: [], pinned_projects: [] };
+  const orderedBoardStatusGroups = useMemo(
+    () => (board.data?.groups || []).map((group: DashboardBoardGroup) => ({ ...group, tasks: sortTasksWithPreference(group.tasks, boardPreferenceData.task_order) })),
+    [board.data?.groups, boardPreferenceData.task_order],
+  );
+  const orderedBoardTasks = useMemo(() => sortTasksWithPreference(allTasks.data || [], boardPreferenceData.task_order), [allTasks.data, boardPreferenceData.task_order]);
+  const boardStatusGroups = orderedBoardStatusGroups;
+  const boardProjectGroups = useMemo(
+    () => sortProjectGroupsWithPreference(groupTasksByProject(orderedBoardTasks), boardPreferenceData.pinned_projects),
+    [orderedBoardTasks, boardPreferenceData.pinned_projects],
+  );
+  const filteredProjectGroups = useMemo(() => {
+    const query = boardProjectQuery.trim().toLowerCase();
+    if (!query) return boardProjectGroups;
+    return boardProjectGroups.filter((group) => group.title.toLowerCase().includes(query));
+  }, [boardProjectGroups, boardProjectQuery]);
+  const visibleProjectGroups = useMemo(() => filteredProjectGroups.slice(0, visibleProjectGroupCount), [filteredProjectGroups, visibleProjectGroupCount]);
   const boardGroups = boardMode === 'status' ? boardStatusGroups : visibleProjectGroups;
-  const hasMoreProjectGroups = boardMode === 'project' && visibleProjectGroupCount < boardProjectGroups.length;
+  const hasMoreProjectGroups = boardMode === 'project' && visibleProjectGroupCount < filteredProjectGroups.length;
   const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
   const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
   const visibleHistoryGroups = useMemo(() => historyDateGroups.slice(0, visibleHistoryGroupCount), [historyDateGroups, visibleHistoryGroupCount]);
@@ -312,12 +375,17 @@ function App() {
   }, []);
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
     if (boardMode !== 'project') {
       setVisibleProjectGroupCount(6);
       return;
     }
     setVisibleProjectGroupCount(6);
-  }, [boardMode, allTasks.data]);
+    setExpandedProjectKeys([]);
+  }, [boardMode, filteredProjectGroups.length]);
 
   useEffect(() => {
     if (boardMode !== 'project' || !hasMoreProjectGroups || !projectLoadMoreRef.current) return;
@@ -325,7 +393,7 @@ function App() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          setVisibleProjectGroupCount((prev) => Math.min(prev + 6, boardProjectGroups.length));
+          setVisibleProjectGroupCount((prev) => Math.min(prev + 6, filteredProjectGroups.length));
         }
       },
       { root: null, rootMargin: '240px 0px 320px 0px', threshold: 0.01 },
@@ -333,7 +401,7 @@ function App() {
 
     observer.observe(projectLoadMoreRef.current);
     return () => observer.disconnect();
-  }, [boardMode, hasMoreProjectGroups, boardProjectGroups.length]);
+  }, [boardMode, hasMoreProjectGroups, filteredProjectGroups.length]);
 
   useEffect(() => {
     setVisibleHistoryGroupCount(6);
@@ -414,9 +482,39 @@ function App() {
     const jobs: Array<Promise<unknown>> = [];
     if (activeTab === 'today') jobs.push(today.refresh());
     if (activeTab === 'plan') jobs.push(plan.refresh());
-    if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh());
+    if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
+  }
+
+  async function saveBoardPreferences(next: Partial<BoardPreferences>) {
+    const merged: BoardPreferences = {
+      task_order: next.task_order ?? boardPreferenceData.task_order,
+      pinned_projects: next.pinned_projects ?? boardPreferenceData.pinned_projects,
+    };
+    boardPreferences.setData(merged);
+    try {
+      const saved = await api.updateBoardPreferences(next);
+      boardPreferences.setData(saved);
+      return saved;
+    } catch (error) {
+      boardPreferences.setData(boardPreferenceData);
+      throw error;
+    }
+  }
+
+  async function handleMoveBoardTask(tasks: Task[], taskId: number, direction: 'up' | 'down') {
+    const nextOrder = buildTaskOrderPayload(tasks, boardPreferenceData.task_order, taskId, direction);
+    if (nextOrder === boardPreferenceData.task_order) return;
+    await saveBoardPreferences({ task_order: nextOrder });
+    await Promise.all([board.refresh(), allTasks.refresh()]);
+  }
+
+  async function handleTogglePinnedProject(projectName: string) {
+    const current = boardPreferenceData.pinned_projects;
+    const nextPinned = current.includes(projectName) ? current.filter((name) => name !== projectName) : [projectName, ...current];
+    await saveBoardPreferences({ pinned_projects: nextPinned });
+    await projects.refresh();
   }
 
   async function runTaskAction(type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
@@ -516,6 +614,12 @@ function App() {
   return (
     <div className="app-shell">
       <main className="content">
+        <div className="utility-bar">
+          <button className="theme-toggle" type="button" onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}>
+            <span aria-hidden="true">{theme === 'light' ? '🌙' : '☀️'}</span>
+            <span>{theme === 'light' ? '夜间模式' : '日间模式'}</span>
+          </button>
+        </div>
         {activeTab === 'today' && (
           <section className="page">
             <TodayHero
@@ -556,10 +660,20 @@ function App() {
 
         {activeTab === 'board' && (
           <section className="page">
-            <BoardHero mode={boardMode} projects={projects.data || []} groups={boardMode === 'status' ? boardStatusGroups : boardProjectGroups} tasks={allTasks.data || []} onChangeMode={setBoardMode} />
+            <BoardHero
+              mode={boardMode}
+              projects={projects.data || []}
+              groups={boardMode === 'status' ? boardStatusGroups : boardProjectGroups}
+              tasks={orderedBoardTasks}
+              projectQuery={boardProjectQuery}
+              onProjectQueryChange={setBoardProjectQuery}
+              onExpandAllProjects={() => setExpandedProjectKeys(filteredProjectGroups.map((group) => group.key))}
+              onCollapseAllProjects={() => setExpandedProjectKeys([])}
+              onChangeMode={setBoardMode}
+            />
             {((boardMode === 'status' && board.loading && !board.loaded) || (boardMode === 'project' && allTasks.loading && !allTasks.loaded)) && <StateCard text="看板加载中…" />}
-            {(board.error || allTasks.error) && <StateCard text={board.error || allTasks.error || '加载失败'} tone="danger" />}
-            {!board.error && !allTasks.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text="当前没有可展示的任务" />}
+            {(board.error || allTasks.error || boardPreferences.error) && <StateCard text={board.error || allTasks.error || boardPreferences.error || '加载失败'} tone="danger" />}
+            {!board.error && !allTasks.error && !boardPreferences.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text={boardMode === 'project' && boardProjectQuery ? '没有匹配的项目 / 标签' : '当前没有可展示的任务'} />}
             {!board.error && !allTasks.error && boardGroups.map((group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] }) => {
               const statusAccent = boardMode === 'status'
                 ? ((group.key === 'todo'
@@ -575,6 +689,8 @@ function App() {
               const description = boardMode === 'status'
                 ? boardGroupDescriptions[group.key as TaskStatus]
                 : `${group.tasks.length} 项任务挂在这个项目下，适合集中收线，不用在全局列表里来回找。`;
+              const isProjectGroup = boardMode === 'project';
+              const pinned = isProjectGroup && boardPreferenceData.pinned_projects.includes(group.title);
 
               return (
                 <TaskGroupSection
@@ -585,6 +701,14 @@ function App() {
                   accent={statusAccent}
                   onOpenTask={openTask}
                   variant="board"
+                  collapsed={isProjectGroup ? !expandedProjectKeys.includes(group.key) : undefined}
+                  onToggleCollapsed={isProjectGroup ? () => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key])) : undefined}
+                  actions={isProjectGroup ? (
+                    <button type="button" className={pinned ? 'chip-button chip-button-active' : 'chip-button'} onClick={() => void handleTogglePinnedProject(group.title)}>
+                      {pinned ? '已置顶' : '置顶'}
+                    </button>
+                  ) : undefined}
+                  onMoveTask={(taskId, direction) => void handleMoveBoardTask(group.tasks, taskId, direction)}
                 />
               );
             })}
@@ -874,6 +998,10 @@ function TaskGroupSection({
   defaultCollapsed = false,
   hideWhenEmpty = false,
   variant = 'default',
+  collapsed: controlledCollapsed,
+  onToggleCollapsed,
+  actions,
+  onMoveTask,
 }: {
   title: string;
   description?: string;
@@ -883,21 +1011,34 @@ function TaskGroupSection({
   defaultCollapsed?: boolean;
   hideWhenEmpty?: boolean;
   variant?: 'default' | 'today' | 'board';
+  collapsed?: boolean;
+  onToggleCollapsed?: () => void;
+  actions?: JSX.Element;
+  onMoveTask?: (taskId: number, direction: 'up' | 'down') => void;
 }) {
-  const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
+  const collapsed = controlledCollapsed ?? internalCollapsed;
 
   useEffect(() => {
-    if (!defaultCollapsed) setCollapsed(false);
-  }, [defaultCollapsed]);
+    if (controlledCollapsed == null) {
+      if (!defaultCollapsed) setInternalCollapsed(false);
+      else setInternalCollapsed(true);
+    }
+  }, [defaultCollapsed, controlledCollapsed]);
 
   if (hideWhenEmpty && tasks.length === 0) return null;
+
+  const toggleCollapsed = () => {
+    if (onToggleCollapsed) onToggleCollapsed();
+    else setInternalCollapsed((prev) => !prev);
+  };
 
   return (
     <section className={`card-section accent-${accent} ${variant === 'today' ? 'today-group-card' : ''} ${variant === 'board' ? 'board-group-card' : ''}`}>
       <button
         type="button"
         className={`section-heading collapsible-heading ${variant === 'today' ? 'today-group-heading' : ''} ${variant === 'board' ? 'board-group-heading' : ''}`}
-        onClick={() => setCollapsed((prev) => !prev)}
+        onClick={toggleCollapsed}
       >
         <div className="section-heading-copy">
           <div className="today-group-title-row">
@@ -907,13 +1048,14 @@ function TaskGroupSection({
           {description ? <span>{description}</span> : <span>{tasks.length} 项</span>}
         </div>
         <div className="section-heading-side">
+          {actions ? <span className="group-actions-inline" onClick={(event) => event.stopPropagation()}>{actions}</span> : null}
           <span className="section-count-badge">{tasks.length} 项</span>
           <span className="section-toggle-icon">{collapsed ? '+' : '−'}</span>
         </div>
       </button>
       {!collapsed && (
         <div className="task-list">
-          {tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} />) : <EmptyHint label={`暂无${title}`} />}
+          {tasks.length ? tasks.map((task, index) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} onMoveTask={onMoveTask} canMoveUp={index > 0} canMoveDown={index < tasks.length - 1} />) : <EmptyHint label={`暂无${title}`} />}
         </div>
       )}
     </section>
@@ -988,12 +1130,20 @@ function BoardHero({
   projects,
   groups,
   tasks,
+  projectQuery,
+  onProjectQueryChange,
+  onExpandAllProjects,
+  onCollapseAllProjects,
   onChangeMode,
 }: {
   mode: BoardMode;
   projects: ProjectSummary[];
   groups: Array<DashboardBoardGroup | { key: string; title: string; tasks: Task[] }>;
   tasks: Task[];
+  projectQuery: string;
+  onProjectQueryChange: (value: string) => void;
+  onExpandAllProjects: () => void;
+  onCollapseAllProjects: () => void;
   onChangeMode: (mode: BoardMode) => void;
 }) {
   const openCount = tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled').length;
@@ -1050,6 +1200,19 @@ function BoardHero({
           <strong>{mode === 'status' ? groups.length - emptyGroups : projects.length}</strong>
         </span>
       </div>
+
+      {mode === 'project' && (
+        <div className="board-hero-tools">
+          <label className="field board-search-field">
+            <span className="label-caption">项目 / 标签搜索</span>
+            <input value={projectQuery} onChange={(event) => onProjectQueryChange(event.target.value)} placeholder="输入项目名快速筛选" />
+          </label>
+          <div className="board-hero-actions-inline">
+            <button type="button" className="ghost-chip" onClick={onExpandAllProjects}>全部展开</button>
+            <button type="button" className="ghost-chip" onClick={onCollapseAllProjects}>全部折叠</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -1164,21 +1327,47 @@ function HistoryDaySection({
   );
 }
 
-function TaskRow({ task, onClick, showUpdated = false }: { task: Task; onClick: () => void; showUpdated?: boolean }) {
+function TaskRow({
+  task,
+  onClick,
+  showUpdated = false,
+  onMoveTask,
+  canMoveUp = false,
+  canMoveDown = false,
+}: {
+  task: Task;
+  onClick: () => void;
+  showUpdated?: boolean;
+  onMoveTask?: (taskId: number, direction: 'up' | 'down') => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
+}) {
   return (
-    <button type="button" className="task-row" onClick={onClick}>
-      <div className="task-row-main">
-        <div className="task-title">{task.title}</div>
-        <div className="task-meta">
-          <StatusPill status={task.status} />
-          <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
-          {task.project && <span className="project-pill">{task.project}</span>}
-          {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
+    <div className="task-row task-row-shell">
+      <button type="button" className="task-row task-row-button" onClick={onClick}>
+        <div className="task-row-main">
+          <div className="task-title">{task.title}</div>
+          <div className="task-meta">
+            <StatusPill status={task.status} />
+            <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
+            {task.project && <span className="project-pill">{task.project}</span>}
+            {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
+          </div>
+          {task.description && <div className="task-desc">{task.description}</div>}
         </div>
-        {task.description && <div className="task-desc">{task.description}</div>}
-      </div>
-      <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
-    </button>
+        <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
+      </button>
+      {onMoveTask && (
+        <div className="task-row-sort-actions">
+          <button type="button" className="mini-icon-button" disabled={!canMoveUp} onClick={() => onMoveTask(task.id, 'up')} aria-label="上移">
+            ↑
+          </button>
+          <button type="button" className="mini-icon-button" disabled={!canMoveDown} onClick={() => onMoveTask(task.id, 'down')} aria-label="下移">
+            ↓
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

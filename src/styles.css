@@ -1593,3 +1593,129 @@ button {
     box-shadow: 0 40px 80px rgba(12, 27, 77, 0.16);
   }
 }
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1420;
+  --panel: #171d2d;
+  --line: #263049;
+  --line-strong: #33415f;
+  --text: #edf2ff;
+  --muted: #98a2b3;
+  --muted-strong: #c6d0e0;
+  --brand: #6f8dff;
+  --brand-strong: #8ea6ff;
+  --brand-soft: rgba(111, 141, 255, 0.16);
+  --brand-tint: rgba(111, 141, 255, 0.18);
+  --danger-soft: rgba(201, 63, 79, 0.18);
+  --warning-soft: rgba(183, 121, 31, 0.18);
+  --success-soft: rgba(23, 130, 79, 0.18);
+  --plan-soft: rgba(99, 102, 241, 0.18);
+  --plan-tint: rgba(99, 102, 241, 0.18);
+  --shadow: 0 18px 44px rgba(0, 0, 0, 0.32);
+  --shadow-soft: 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.utility-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 10px;
+}
+
+.theme-toggle,
+.ghost-chip,
+.chip-button,
+.mini-icon-button {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--text);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-weight: 700;
+  box-shadow: var(--shadow-soft);
+}
+
+.board-hero-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.board-search-field input {
+  width: 100%;
+}
+
+.board-hero-actions-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ghost-chip,
+.chip-button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.chip-button-active {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  border-color: rgba(49, 87, 225, 0.24);
+}
+
+.group-actions-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 6px;
+}
+
+.task-row-shell {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+  background: transparent;
+}
+
+.task-row-button {
+  flex: 1;
+}
+
+.task-row-sort-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-self: center;
+}
+
+.mini-icon-button {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.mini-icon-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@media (max-width: 420px) {
+  .task-row-shell {
+    gap: 6px;
+  }
+
+  .mini-icon-button {
+    width: 30px;
+    height: 30px;
+  }
+}
