@@ -1477,22 +1477,24 @@ function TaskRow({
 }
 
 function MoveArrowIcon({ direction }: { direction: 'up' | 'down' }) {
-  return direction === 'up' ? (
-    <svg className="project-action-icon project-action-icon-arrow" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 2.75 12.75 7.5H9.35v5.75h-2.7V7.5h-3.4L8 2.75Z" fill="currentColor" />
-    </svg>
-  ) : (
-    <svg className="project-action-icon project-action-icon-arrow" viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M6.65 2.75h2.7V8.5h3.4L8 13.25 3.25 8.5h3.4V2.75Z" fill="currentColor" />
-    </svg>
+  return (
+    <span
+      className={direction === 'up'
+        ? 'project-action-shape project-action-shape-arrow-up'
+        : 'project-action-shape project-action-shape-arrow-down'}
+      aria-hidden="true"
+    />
   );
 }
 
 function PinIcon({ active }: { active: boolean }) {
   return (
-    <svg className={active ? 'project-action-icon project-action-icon-pin project-action-icon-pin-active' : 'project-action-icon project-action-icon-pin project-action-icon-pin-inactive'} viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M10.05 2.5c.76 0 1.36.67 1.26 1.42l-.2 1.45 1.88 1.89c.41.4.12 1.09-.46 1.09H9.7l-1.04 5.08c-.07.38-.6.44-.77.09L6.1 8.35H3.47c-.58 0-.87-.69-.46-1.09l1.88-1.89-.2-1.45A1.27 1.27 0 0 1 5.95 2.5h4.1Z" fill="currentColor" />
-    </svg>
+    <span
+      className={active
+        ? 'project-action-shape project-action-shape-pin project-action-shape-pin-active'
+        : 'project-action-shape project-action-shape-pin project-action-shape-pin-inactive'}
+      aria-hidden="true"
+    />
   );
 }
 

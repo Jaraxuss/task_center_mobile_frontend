@@ -1808,24 +1808,93 @@ button {
   opacity: 0.72;
 }
 
-.project-action-icon {
-  width: 18px;
-  height: 18px;
-  display: block;
+.project-action-shape {
+  position: relative;
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
   color: inherit;
 }
 
-.project-action-icon-arrow {
-  width: 17px;
-  height: 17px;
+.project-action-shape-arrow-up::before,
+.project-action-shape-arrow-down::before,
+.project-action-shape-arrow-up::after,
+.project-action-shape-arrow-down::after,
+.project-action-shape-pin::before,
+.project-action-shape-pin::after {
+  content: '';
+  position: absolute;
+  display: block;
 }
 
-.project-action-icon-pin {
-  width: 16px;
-  height: 16px;
+.project-action-shape-arrow-up::before {
+  left: 2px;
+  top: 1px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 7px solid currentColor;
 }
 
-.project-action-icon-pin-inactive {
+.project-action-shape-arrow-up::after {
+  left: 7px;
+  top: 7px;
+  width: 2px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.project-action-shape-arrow-down::before {
+  left: 7px;
+  top: 1px;
+  width: 2px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.project-action-shape-arrow-down::after {
+  left: 2px;
+  top: 8px;
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 7px solid currentColor;
+}
+
+.project-action-shape-pin::before {
+  left: 3px;
+  top: 1px;
+  width: 10px;
+  height: 7px;
+  border-radius: 999px;
+  transform: rotate(-10deg);
+}
+
+.project-action-shape-pin::after {
+  left: 7px;
+  top: 6px;
+  width: 2px;
+  height: 8px;
+  border-radius: 999px;
+  transform: rotate(16deg);
+  background: currentColor;
+}
+
+.project-action-shape-pin-active::before {
+  background: currentColor;
+}
+
+.project-action-shape-pin-inactive::before {
+  border: 1.6px solid currentColor;
+  background: transparent;
+}
+
+.project-action-shape-pin-inactive::after {
   opacity: 0.88;
 }
 
