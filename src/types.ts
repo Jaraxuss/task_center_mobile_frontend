@@ -104,6 +104,7 @@ export interface ProjectSummary {
 export interface BoardPreferences {
   task_order: number[];
   pinned_projects: string[];
+  project_order: string[];
 }
 
 export interface HistoryResponse {

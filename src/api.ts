@@ -273,6 +273,9 @@ export const api = {
       pinned_projects: Array.isArray(response?.pinned_projects)
         ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
         : [],
+      project_order: Array.isArray(response?.project_order)
+        ? response.project_order.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [],
     } satisfies BoardPreferences;
   },
   updateBoardPreferences: async (payload: Partial<BoardPreferences>) => {
@@ -284,6 +287,9 @@ export const api = {
       task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
       pinned_projects: Array.isArray(response?.pinned_projects)
         ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+        : [],
+      project_order: Array.isArray(response?.project_order)
+        ? response.project_order.map((item: unknown) => String(item || '').trim()).filter(Boolean)
         : [],
     } satisfies BoardPreferences;
   },

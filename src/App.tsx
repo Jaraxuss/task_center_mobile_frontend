@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData, usePersistentState } from './hooks';
 import { BoardPreferences, DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
-import { APP_TIME_ZONE, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
+import { APP_TIME_ZONE, TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'history';
 type BoardMode = 'status' | 'project';
+type ThemeMode = 'light' | 'dark';
 type TaskActionType = 'complete' | 'reschedule' | 'defer' | 'cancel';
 type TaskFormMode = 'create' | 'edit';
 
@@ -37,6 +38,26 @@ const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
 ];
 
 const statusOrder: TaskStatus[] = ['todo', 'doing', 'deferred', 'done', 'canceled'];
+
+const BOARD_CONTENT_MAX_MIN = 20;
+const BOARD_CONTENT_MAX_DEFAULT = 50;
+const BOARD_CONTENT_MAX_LIMIT = 200;
+
+const timeFormatOptions: Array<{ value: TimeFormatMode; label: string; sample: string }> = [
+  { value: 'cn-short', label: '月/日 24 小时', sample: '04/19 20:30' },
+  { value: 'ymd-24', label: '年-月-日 24 小时', sample: '2026/04/19 20:30' },
+  { value: 'slash-24', label: '年/月/日 24 小时', sample: '2026/04/19 20:30' },
+];
+
+function clampBoardContentMaxLength(value: number) {
+  if (!Number.isFinite(value)) return BOARD_CONTENT_MAX_DEFAULT;
+  return Math.min(BOARD_CONTENT_MAX_LIMIT, Math.max(BOARD_CONTENT_MAX_MIN, Math.round(value)));
+}
+
+function truncateText(value: string, maxLength?: number) {
+  if (!maxLength || value.length <= maxLength) return value;
+  return `${value.slice(0, Math.max(0, maxLength)).trimEnd()}…`;
+}
 
 const boardTitles: Record<TaskStatus, string> = {
   todo: '待办',
@@ -228,25 +249,40 @@ function sortTasksWithPreference(tasks: Task[], taskOrder: number[]) {
   });
 }
 
-function sortProjectGroupsWithPreference(groups: Array<{ key: string; title: string; tasks: Task[] }>, pinnedProjects: string[]) {
+function sortProjectGroupsWithPreference(groups: Array<{ key: string; title: string; tasks: Task[] }>, pinnedProjects: string[], projectOrder: string[]) {
   const pinnedMap = new Map(pinnedProjects.map((name, index) => [name, index]));
+  const projectOrderMap = new Map(projectOrder.map((name, index) => [name, index]));
+
   return [...groups].sort((a, b) => {
     const aPinned = pinnedMap.has(a.title);
     const bPinned = pinnedMap.has(b.title);
     if (aPinned || bPinned) {
-      if (aPinned && bPinned) return (pinnedMap.get(a.title) || 0) - (pinnedMap.get(b.title) || 0);
-      return aPinned ? -1 : 1;
+      if (aPinned && bPinned) {
+        const aPinnedIndex = pinnedMap.get(a.title) ?? 10 ** 9;
+        const bPinnedIndex = pinnedMap.get(b.title) ?? 10 ** 9;
+        if (aPinnedIndex !== bPinnedIndex) return aPinnedIndex - bPinnedIndex;
+      } else {
+        return aPinned ? -1 : 1;
+      }
     }
+
+    const aOrdered = projectOrderMap.has(a.title);
+    const bOrdered = projectOrderMap.has(b.title);
+    if (aOrdered || bOrdered) {
+      if (aOrdered && bOrdered) return (projectOrderMap.get(a.title) ?? 0) - (projectOrderMap.get(b.title) ?? 0);
+      return aOrdered ? -1 : 1;
+    }
+
     return a.title.localeCompare(b.title, 'zh-CN');
   });
 }
 
-function buildTaskOrderPayload(tasks: Task[], currentOrder: number[], movingTaskId: number, direction: 'up' | 'down') {
-  const visibleIds = tasks.map((task) => task.id);
-  const preferredVisible = currentOrder.filter((taskId) => visibleIds.includes(taskId));
-  const remainingVisible = visibleIds.filter((taskId) => !preferredVisible.includes(taskId));
+function buildProjectOrderPayload(groups: Array<{ key: string; title: string; tasks: Task[] }>, currentOrder: string[], movingProjectName: string, direction: 'up' | 'down') {
+  const visibleNames = groups.map((group) => group.title);
+  const preferredVisible = currentOrder.filter((projectName) => visibleNames.includes(projectName));
+  const remainingVisible = visibleNames.filter((projectName) => !preferredVisible.includes(projectName));
   const orderedVisible = [...preferredVisible, ...remainingVisible];
-  const currentIndex = orderedVisible.indexOf(movingTaskId);
+  const currentIndex = orderedVisible.indexOf(movingProjectName);
   const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
 
   if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedVisible.length) return currentOrder;
@@ -255,7 +291,7 @@ function buildTaskOrderPayload(tasks: Task[], currentOrder: number[], movingTask
   const [moving] = nextVisible.splice(currentIndex, 1);
   nextVisible.splice(targetIndex, 0, moving);
 
-  const preservedHidden = currentOrder.filter((taskId) => !visibleIds.includes(taskId));
+  const preservedHidden = currentOrder.filter((projectName) => !visibleNames.includes(projectName));
   return [...nextVisible, ...preservedHidden];
 }
 
@@ -307,7 +343,10 @@ function App() {
   const initialRoute = parseRouteState();
   const [activeTab, setActiveTab] = useState<TabKey>(initialRoute.tab);
   const [boardMode, setBoardMode] = useState<BoardMode>(initialRoute.boardMode);
-  const [theme, setTheme] = usePersistentState<'light' | 'dark'>('task-center-mobile-theme', 'light');
+  const [theme, setTheme] = usePersistentState<ThemeMode>('task-center-mobile-theme', 'light');
+  const [timeFormat, setTimeFormat] = usePersistentState<TimeFormatMode>('task-center-mobile-time-format', 'cn-short');
+  const [boardContentMaxLength, setBoardContentMaxLength] = usePersistentState<number>('task-center-mobile-board-content-max-length', BOARD_CONTENT_MAX_DEFAULT);
+  const [showSettings, setShowSettings] = useState(false);
   const [showHistoryFilter, setShowHistoryFilter] = useState(false);
   const [historyDraft, setHistoryDraft] = useState(initialRoute.historyDraft);
   const [historyFilters, setHistoryFilters] = useState(initialRoute.historyDraft);
@@ -337,7 +376,7 @@ function App() {
     activeTab === 'history',
   );
 
-  const boardPreferenceData: BoardPreferences = boardPreferences.data || { task_order: [], pinned_projects: [] };
+  const boardPreferenceData: BoardPreferences = boardPreferences.data || { task_order: [], pinned_projects: [], project_order: [] };
   const orderedBoardStatusGroups = useMemo(
     () => (board.data?.groups || []).map((group: DashboardBoardGroup) => ({ ...group, tasks: sortTasksWithPreference(group.tasks, boardPreferenceData.task_order) })),
     [board.data?.groups, boardPreferenceData.task_order],
@@ -345,8 +384,8 @@ function App() {
   const orderedBoardTasks = useMemo(() => sortTasksWithPreference(allTasks.data || [], boardPreferenceData.task_order), [allTasks.data, boardPreferenceData.task_order]);
   const boardStatusGroups = orderedBoardStatusGroups;
   const boardProjectGroups = useMemo(
-    () => sortProjectGroupsWithPreference(groupTasksByProject(orderedBoardTasks), boardPreferenceData.pinned_projects),
-    [orderedBoardTasks, boardPreferenceData.pinned_projects],
+    () => sortProjectGroupsWithPreference(groupTasksByProject(orderedBoardTasks), boardPreferenceData.pinned_projects, boardPreferenceData.project_order),
+    [orderedBoardTasks, boardPreferenceData.pinned_projects, boardPreferenceData.project_order],
   );
   const filteredProjectGroups = useMemo(() => {
     const query = boardProjectQuery.trim().toLowerCase();
@@ -377,6 +416,16 @@ function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.timeFormat = timeFormat;
+  }, [timeFormat]);
+
+  useEffect(() => {
+    if (boardContentMaxLength !== clampBoardContentMaxLength(boardContentMaxLength)) {
+      setBoardContentMaxLength(clampBoardContentMaxLength(boardContentMaxLength));
+    }
+  }, [boardContentMaxLength, setBoardContentMaxLength]);
 
   useEffect(() => {
     if (boardMode !== 'project') {
@@ -491,6 +540,7 @@ function App() {
     const merged: BoardPreferences = {
       task_order: next.task_order ?? boardPreferenceData.task_order,
       pinned_projects: next.pinned_projects ?? boardPreferenceData.pinned_projects,
+      project_order: next.project_order ?? boardPreferenceData.project_order,
     };
     boardPreferences.setData(merged);
     try {
@@ -503,11 +553,11 @@ function App() {
     }
   }
 
-  async function handleMoveBoardTask(tasks: Task[], taskId: number, direction: 'up' | 'down') {
-    const nextOrder = buildTaskOrderPayload(tasks, boardPreferenceData.task_order, taskId, direction);
-    if (nextOrder === boardPreferenceData.task_order) return;
-    await saveBoardPreferences({ task_order: nextOrder });
-    await Promise.all([board.refresh(), allTasks.refresh()]);
+  async function handleMoveProjectGroup(projectName: string, direction: 'up' | 'down') {
+    const nextOrder = buildProjectOrderPayload(boardProjectGroups, boardPreferenceData.project_order, projectName, direction);
+    if (JSON.stringify(nextOrder) === JSON.stringify(boardPreferenceData.project_order)) return;
+    await saveBoardPreferences({ project_order: nextOrder });
+    await projects.refresh();
   }
 
   async function handleTogglePinnedProject(projectName: string) {
@@ -614,12 +664,6 @@ function App() {
   return (
     <div className="app-shell">
       <main className="content">
-        <div className="utility-bar">
-          <button className="theme-toggle" type="button" onClick={() => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'))}>
-            <span aria-hidden="true">{theme === 'light' ? '🌙' : '☀️'}</span>
-            <span>{theme === 'light' ? '夜间模式' : '日间模式'}</span>
-          </button>
-        </div>
         {activeTab === 'today' && (
           <section className="page">
             <TodayHero
@@ -666,6 +710,7 @@ function App() {
               groups={boardMode === 'status' ? boardStatusGroups : boardProjectGroups}
               tasks={orderedBoardTasks}
               projectQuery={boardProjectQuery}
+              filteredProjectCount={filteredProjectGroups.length}
               onProjectQueryChange={setBoardProjectQuery}
               onExpandAllProjects={() => setExpandedProjectKeys(filteredProjectGroups.map((group) => group.key))}
               onCollapseAllProjects={() => setExpandedProjectKeys([])}
@@ -691,6 +736,19 @@ function App() {
                 : `${group.tasks.length} 项任务挂在这个项目下，适合集中收线，不用在全局列表里来回找。`;
               const isProjectGroup = boardMode === 'project';
               const pinned = isProjectGroup && boardPreferenceData.pinned_projects.includes(group.title);
+              const projectIndex = isProjectGroup ? boardProjectGroups.findIndex((item) => item.key === group.key) : -1;
+              const previousProject = projectIndex > 0 ? boardProjectGroups[projectIndex - 1] : null;
+              const nextProject = projectIndex >= 0 && projectIndex < boardProjectGroups.length - 1 ? boardProjectGroups[projectIndex + 1] : null;
+              const canMoveProjectUp = Boolean(
+                isProjectGroup
+                  && previousProject
+                  && boardPreferenceData.pinned_projects.includes(previousProject.title) === pinned,
+              );
+              const canMoveProjectDown = Boolean(
+                isProjectGroup
+                  && nextProject
+                  && boardPreferenceData.pinned_projects.includes(nextProject.title) === pinned,
+              );
 
               return (
                 <TaskGroupSection
@@ -701,14 +759,18 @@ function App() {
                   accent={statusAccent}
                   onOpenTask={openTask}
                   variant="board"
+                  taskDescriptionMaxLength={boardContentMaxLength}
                   collapsed={isProjectGroup ? !expandedProjectKeys.includes(group.key) : undefined}
                   onToggleCollapsed={isProjectGroup ? () => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key])) : undefined}
                   actions={isProjectGroup ? (
-                    <button type="button" className={pinned ? 'chip-button chip-button-active' : 'chip-button'} onClick={() => void handleTogglePinnedProject(group.title)}>
-                      {pinned ? '已置顶' : '置顶'}
-                    </button>
+                    <>
+                      <button type="button" className="mini-icon-button" disabled={!canMoveProjectUp} onClick={() => void handleMoveProjectGroup(group.title, 'up')} aria-label={`上移项目 ${group.title}`}>↑</button>
+                      <button type="button" className="mini-icon-button" disabled={!canMoveProjectDown} onClick={() => void handleMoveProjectGroup(group.title, 'down')} aria-label={`下移项目 ${group.title}`}>↓</button>
+                      <button type="button" className={pinned ? 'chip-button chip-button-active' : 'chip-button'} onClick={() => void handleTogglePinnedProject(group.title)}>
+                        {pinned ? '已置顶' : '置顶'}
+                      </button>
+                    </>
                   ) : undefined}
-                  onMoveTask={(taskId, direction) => void handleMoveBoardTask(group.tasks, taskId, direction)}
                 />
               );
             })}
@@ -747,13 +809,25 @@ function App() {
         )}
       </main>
 
-      <nav className="bottom-nav">
+      <nav className="bottom-nav bottom-nav-five">
         {tabs.map((tab) => (
-          <button key={tab.key} type="button" className={tab.key === activeTab ? 'nav-item nav-item-active' : 'nav-item'} onClick={() => setActiveTab(tab.key)}>
+          <button
+            key={tab.key}
+            type="button"
+            className={tab.key === activeTab && !showSettings ? 'nav-item nav-item-active' : 'nav-item'}
+            onClick={() => {
+              setShowSettings(false);
+              setActiveTab(tab.key);
+            }}
+          >
             <span>{tab.icon}</span>
             <span>{tab.label}</span>
           </button>
         ))}
+        <button type="button" className={showSettings ? 'nav-item nav-item-active' : 'nav-item'} onClick={() => setShowSettings(true)}>
+          <span>⚙</span>
+          <span>设置</span>
+        </button>
       </nav>
 
       {selectedTask && (
@@ -829,6 +903,18 @@ function App() {
             setHistoryFilters(next);
             setShowHistoryFilter(false);
           }}
+        />
+      )}
+
+      {showSettings && (
+        <SettingsSheet
+          theme={theme}
+          timeFormat={timeFormat}
+          boardContentMaxLength={boardContentMaxLength}
+          onClose={() => setShowSettings(false)}
+          onThemeChange={setTheme}
+          onTimeFormatChange={setTimeFormat}
+          onBoardContentMaxLengthChange={(value) => setBoardContentMaxLength(clampBoardContentMaxLength(value))}
         />
       )}
 
@@ -1001,7 +1087,7 @@ function TaskGroupSection({
   collapsed: controlledCollapsed,
   onToggleCollapsed,
   actions,
-  onMoveTask,
+  taskDescriptionMaxLength,
 }: {
   title: string;
   description?: string;
@@ -1014,7 +1100,7 @@ function TaskGroupSection({
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
   actions?: JSX.Element;
-  onMoveTask?: (taskId: number, direction: 'up' | 'down') => void;
+  taskDescriptionMaxLength?: number;
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -1055,7 +1141,7 @@ function TaskGroupSection({
       </button>
       {!collapsed && (
         <div className="task-list">
-          {tasks.length ? tasks.map((task, index) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} onMoveTask={onMoveTask} canMoveUp={index > 0} canMoveDown={index < tasks.length - 1} />) : <EmptyHint label={`暂无${title}`} />}
+          {tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} descriptionMaxLength={variant === 'board' ? taskDescriptionMaxLength : undefined} />) : <EmptyHint label={`暂无${title}`} />}
         </div>
       )}
     </section>
@@ -1131,6 +1217,7 @@ function BoardHero({
   groups,
   tasks,
   projectQuery,
+  filteredProjectCount,
   onProjectQueryChange,
   onExpandAllProjects,
   onCollapseAllProjects,
@@ -1141,6 +1228,7 @@ function BoardHero({
   groups: Array<DashboardBoardGroup | { key: string; title: string; tasks: Task[] }>;
   tasks: Task[];
   projectQuery: string;
+  filteredProjectCount: number;
   onProjectQueryChange: (value: string) => void;
   onExpandAllProjects: () => void;
   onCollapseAllProjects: () => void;
@@ -1153,14 +1241,14 @@ function BoardHero({
 
   return (
     <section className="today-hero card-section accent-brand-soft board-hero-compact">
-      <div className="today-hero-main">
-        <div className="today-hero-heading">
+      <div className="board-hero-topline">
+        <div className="today-hero-heading board-hero-heading-compact">
           <span className="topbar-kicker today-hero-kicker">看板视图</span>
-          <h2>看清现在手上的任务面</h2>
-          <p>按状态快速扫盘，或按项目集中收线。</p>
+          <h2>{mode === 'status' ? '按状态扫盘' : '按项目收线'}</h2>
+          <p>{mode === 'status' ? '先看推进面，再决定今天先动哪一块。' : '搜项目、调顺序、集中把一条线收干净。'}</p>
         </div>
 
-        <div className="board-segmented" role="tablist" aria-label="看板分组方式">
+        <div className="board-segmented board-segmented-compact" role="tablist" aria-label="看板分组方式">
           <button
             type="button"
             role="tab"
@@ -1182,7 +1270,7 @@ function BoardHero({
         </div>
       </div>
 
-      <div className="today-priority-strip board-priority-strip" aria-label="看板概览">
+      <div className="today-priority-strip board-priority-strip board-priority-strip-compact" aria-label="看板概览">
         <span className="today-priority-chip">
           <span className="today-priority-chip-label">未收口</span>
           <strong>{openCount}</strong>
@@ -1202,14 +1290,23 @@ function BoardHero({
       </div>
 
       {mode === 'project' && (
-        <div className="board-hero-tools">
-          <label className="field board-search-field">
-            <span className="label-caption">项目 / 标签搜索</span>
-            <input value={projectQuery} onChange={(event) => onProjectQueryChange(event.target.value)} placeholder="输入项目名快速筛选" />
-          </label>
-          <div className="board-hero-actions-inline">
-            <button type="button" className="ghost-chip" onClick={onExpandAllProjects}>全部展开</button>
-            <button type="button" className="ghost-chip" onClick={onCollapseAllProjects}>全部折叠</button>
+        <div className="board-hero-tools board-hero-tools-compact">
+          <div className="board-search-shell">
+            <span className="board-search-icon" aria-hidden="true">⌕</span>
+            <input
+              className="board-search-input"
+              value={projectQuery}
+              onChange={(event) => onProjectQueryChange(event.target.value)}
+              placeholder="搜索项目 / 标签"
+            />
+            {projectQuery ? (
+              <button type="button" className="board-search-clear" onClick={() => onProjectQueryChange('')} aria-label="清空项目搜索">×</button>
+            ) : null}
+          </div>
+          <div className="board-hero-actions-inline board-hero-actions-inline-compact">
+            <span className="board-search-meta">匹配 {filteredProjectCount} / {projects.length}</span>
+            <button type="button" className="ghost-chip" onClick={onExpandAllProjects}>展开</button>
+            <button type="button" className="ghost-chip" onClick={onCollapseAllProjects}>折叠</button>
           </div>
         </div>
       )}
@@ -1331,16 +1428,12 @@ function TaskRow({
   task,
   onClick,
   showUpdated = false,
-  onMoveTask,
-  canMoveUp = false,
-  canMoveDown = false,
+  descriptionMaxLength,
 }: {
   task: Task;
   onClick: () => void;
   showUpdated?: boolean;
-  onMoveTask?: (taskId: number, direction: 'up' | 'down') => void;
-  canMoveUp?: boolean;
-  canMoveDown?: boolean;
+  descriptionMaxLength?: number;
 }) {
   return (
     <div className="task-row task-row-shell">
@@ -1353,20 +1446,10 @@ function TaskRow({
             {task.project && <span className="project-pill">{task.project}</span>}
             {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
           </div>
-          {task.description && <div className="task-desc">{task.description}</div>}
+          {task.description && <div className="task-desc">{truncateText(task.description, descriptionMaxLength)}</div>}
         </div>
         <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
       </button>
-      {onMoveTask && (
-        <div className="task-row-sort-actions">
-          <button type="button" className="mini-icon-button" disabled={!canMoveUp} onClick={() => onMoveTask(task.id, 'up')} aria-label="上移">
-            ↑
-          </button>
-          <button type="button" className="mini-icon-button" disabled={!canMoveDown} onClick={() => onMoveTask(task.id, 'down')} aria-label="下移">
-            ↓
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1758,6 +1841,73 @@ function HistoryFilterSheet({
         <button type="button" className="primary-submit" onClick={onApply}>
           应用筛选
         </button>
+      </div>
+    </div>
+  );
+}
+
+function SettingsSheet({
+  theme,
+  timeFormat,
+  boardContentMaxLength,
+  onClose,
+  onThemeChange,
+  onTimeFormatChange,
+  onBoardContentMaxLengthChange,
+}: {
+  theme: ThemeMode;
+  timeFormat: TimeFormatMode;
+  boardContentMaxLength: number;
+  onClose: () => void;
+  onThemeChange: (value: ThemeMode) => void;
+  onTimeFormatChange: (value: TimeFormatMode) => void;
+  onBoardContentMaxLengthChange: (value: number) => void;
+}) {
+  return (
+    <div className="overlay">
+      <div className="sheet filter-sheet settings-sheet">
+        <div className="sheet-header">
+          <button type="button" className="ghost-button" onClick={onClose}>关闭</button>
+          <strong>设置</strong>
+          <span className="muted-text">移动端</span>
+        </div>
+        <div className="settings-panel">
+          <section className="settings-card">
+            <div className="settings-card-copy">
+              <span className="label-caption">主题</span>
+              <strong>外观模式</strong>
+              <p className="muted-text">白天看清楚，晚上别刺眼。</p>
+            </div>
+            <div className="settings-theme-row" role="tablist" aria-label="外观模式">
+              <button type="button" className={theme === 'light' ? 'board-segment board-segment-active' : 'board-segment'} onClick={() => onThemeChange('light')}>日间</button>
+              <button type="button" className={theme === 'dark' ? 'board-segment board-segment-active' : 'board-segment'} onClick={() => onThemeChange('dark')}>夜间</button>
+            </div>
+          </section>
+
+          <label className="settings-card settings-field-card">
+            <span className="label-caption">时间显示</span>
+            <select value={timeFormat} onChange={(event) => onTimeFormatChange(event.target.value as TimeFormatMode)}>
+              {timeFormatOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label} · {option.sample}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="settings-card settings-field-card">
+            <span className="label-caption">看板内容最大显示字符数</span>
+            <input
+              type="number"
+              min={BOARD_CONTENT_MAX_MIN}
+              max={BOARD_CONTENT_MAX_LIMIT}
+              step={5}
+              value={boardContentMaxLength}
+              onChange={(event) => onBoardContentMaxLengthChange(Number(event.target.value))}
+            />
+            <span className="muted settings-helper-text">默认 {BOARD_CONTENT_MAX_DEFAULT}，允许 {BOARD_CONTENT_MAX_MIN} - {BOARD_CONTENT_MAX_LIMIT}，会自动保存。</span>
+          </label>
+        </div>
       </div>
     </div>
   );

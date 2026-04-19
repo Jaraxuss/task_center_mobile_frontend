@@ -2,6 +2,20 @@ import { PlanGroup, Task, TaskRecurrence, TaskStatus } from './types';
 
 export const APP_TIME_ZONE = 'Asia/Shanghai';
 
+export type TimeFormatMode = 'cn-short' | 'ymd-24' | 'slash-24';
+
+const timeFormatOptions: Record<TimeFormatMode, Intl.DateTimeFormatOptions> = {
+  'cn-short': { timeZone: APP_TIME_ZONE, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false },
+  'ymd-24': { timeZone: APP_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false },
+  'slash-24': { timeZone: APP_TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false },
+};
+
+export function getTimeFormatMode(): TimeFormatMode {
+  if (typeof document === 'undefined') return 'cn-short';
+  const value = document.documentElement.dataset.timeFormat as TimeFormatMode | undefined;
+  return value && value in timeFormatOptions ? value : 'cn-short';
+}
+
 export const statusLabelMap: Record<TaskStatus, string> = {
   todo: '待办',
   doing: '进行中',
@@ -74,31 +88,23 @@ export function toDateMillis(value?: string | null) {
 export function formatDateTime(value?: string | null) {
   if (!value) return '未设置';
   const naive = getNaiveDateTimeParts(value);
-  if (naive) return `${naive.month}/${naive.day} ${naive.hour}:${naive.minute}`;
+  if (naive) return `${Number(naive.month)}/${Number(naive.day)} ${naive.hour}:${naive.minute}`;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: APP_TIME_ZONE,
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  const mode = getTimeFormatMode();
+
+  if (mode === 'slash-24') {
+    const parts = new Intl.DateTimeFormat('en-CA', timeFormatOptions[mode]).formatToParts(date);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+    return `${get('year')}/${get('month')}/${get('day')} ${get('hour')}:${get('minute')}`;
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', timeFormatOptions[mode]).format(date);
 }
 
 export function formatDateTimeShort(value?: string | null) {
   if (!value) return '暂无';
-  const naive = getNaiveDateTimeParts(value);
-  if (naive) return `${naive.month}/${naive.day} ${naive.hour}:${naive.minute}`;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: APP_TIME_ZONE,
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date);
+  return formatDateTime(value).replace(/^未设置$/, '暂无');
 }
 
 export function formatDateLabel(value?: string | null) {
