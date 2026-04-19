@@ -1781,7 +1781,9 @@ button {
 .project-group-actions-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+  column-gap: 6px;
+  row-gap: 6px;
   align-items: center;
   justify-items: center;
 }
@@ -1789,6 +1791,35 @@ button {
 .project-group-action-button {
   width: 30px;
   height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.project-group-action-button-pin {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.project-group-action-button-pin-inactive {
+  color: var(--muted);
+}
+
+.project-action-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.project-action-icon-pin {
+  width: 15px;
+  height: 15px;
 }
 
 .task-row-button {

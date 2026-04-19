@@ -757,7 +757,6 @@ function App() {
                   && nextProject
                   && boardPreferenceData.pinned_projects.includes(nextProject.title) === pinned,
               );
-              const projectCollapsed = isProjectGroup ? !expandedProjectKeys.includes(group.key) : false;
               const statusCollapsed = !expandedStatusKeys.includes(group.key);
 
               return (
@@ -770,7 +769,7 @@ function App() {
                   onOpenTask={openTask}
                   variant="board"
                   taskDescriptionMaxLength={boardContentMaxLength}
-                  collapsed={isProjectGroup ? projectCollapsed : statusCollapsed}
+                  collapsed={isProjectGroup ? !expandedProjectKeys.includes(group.key) : statusCollapsed}
                   onToggleCollapsed={isProjectGroup
                     ? () => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))
                     : () => setExpandedStatusKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))}
@@ -778,10 +777,34 @@ function App() {
                   showToggleIcon={!isProjectGroup}
                   actions={isProjectGroup ? (
                     <div className="project-group-actions-grid">
-                      <button type="button" className="mini-icon-button project-group-action-button" disabled={!canMoveProjectUp} onClick={() => void handleMoveProjectGroup(group.title, 'up')} aria-label={`上移项目 ${group.title}`}>↑</button>
-                      <button type="button" className={pinned ? 'mini-icon-button mini-icon-button-active project-group-action-button' : 'mini-icon-button project-group-action-button'} onClick={() => void handleTogglePinnedProject(group.title)} aria-label={pinned ? `取消置顶项目 ${group.title}` : `置顶项目 ${group.title}`}>📌</button>
-                      <button type="button" className="mini-icon-button project-group-action-button" disabled={!canMoveProjectDown} onClick={() => void handleMoveProjectGroup(group.title, 'down')} aria-label={`下移项目 ${group.title}`}>↓</button>
-                      <button type="button" className="mini-icon-button project-group-action-button" onClick={() => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))} aria-label={projectCollapsed ? `展开项目 ${group.title}` : `折叠项目 ${group.title}`}>{projectCollapsed ? '▸' : '▾'}</button>
+                      <button
+                        type="button"
+                        className="mini-icon-button project-group-action-button project-group-action-button-up"
+                        disabled={!canMoveProjectUp}
+                        onClick={() => void handleMoveProjectGroup(group.title, 'up')}
+                        aria-label={`上移项目 ${group.title}`}
+                      >
+                        <MoveArrowIcon direction="up" />
+                      </button>
+                      <button
+                        type="button"
+                        className={pinned
+                          ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
+                          : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
+                        onClick={() => void handleTogglePinnedProject(group.title)}
+                        aria-label={pinned ? `取消置顶项目 ${group.title}` : `置顶项目 ${group.title}`}
+                      >
+                        {pinned ? <PinIcon active /> : <PinIcon active={false} />}
+                      </button>
+                      <button
+                        type="button"
+                        className="mini-icon-button project-group-action-button project-group-action-button-down"
+                        disabled={!canMoveProjectDown}
+                        onClick={() => void handleMoveProjectGroup(group.title, 'down')}
+                        aria-label={`下移项目 ${group.title}`}
+                      >
+                        <MoveArrowIcon direction="down" />
+                      </button>
                     </div>
                   ) : undefined}
                 />
@@ -1450,6 +1473,30 @@ function TaskRow({
       </div>
       <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
     </button>
+  );
+}
+
+function MoveArrowIcon({ direction }: { direction: 'up' | 'down' }) {
+  return (
+    <svg className="project-action-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      {direction === 'up' ? (
+        <path d="M8 12V4M8 4L4.75 7.25M8 4l3.25 3.25" />
+      ) : (
+        <path d="M8 4v8M8 12l-3.25-3.25M8 12l3.25-3.25" />
+      )}
+    </svg>
+  );
+}
+
+function PinIcon({ active }: { active: boolean }) {
+  return active ? (
+    <svg className="project-action-icon project-action-icon-pin" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10.05 2.5c.76 0 1.36.67 1.26 1.42l-.2 1.45 1.88 1.89c.41.4.12 1.09-.46 1.09H9.7l-1.04 5.08c-.07.38-.6.44-.77.09L6.1 8.35H3.47c-.58 0-.87-.69-.46-1.09l1.88-1.89-.2-1.45A1.27 1.27 0 0 1 5.95 2.5h4.1Z" fill="currentColor" />
+    </svg>
+  ) : (
+    <svg className="project-action-icon project-action-icon-pin" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M10.05 2.5c.76 0 1.36.67 1.26 1.42l-.2 1.45 1.88 1.89c.41.4.12 1.09-.46 1.09H9.7l-1.04 5.08c-.07.38-.6.44-.77.09L6.1 8.35H3.47c-.58 0-.87-.69-.46-1.09l1.88-1.89-.2-1.45A1.27 1.27 0 0 1 5.95 2.5h4.1Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+    </svg>
   );
 }
 
