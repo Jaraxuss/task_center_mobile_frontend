@@ -361,6 +361,7 @@ function App() {
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
   const [boardProjectQuery, setBoardProjectQuery] = useState('');
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([]);
+  const [expandedStatusKeys, setExpandedStatusKeys] = useState<string[]>(statusOrder);
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -708,11 +709,18 @@ function App() {
               mode={boardMode}
               projects={projects.data || []}
               projectQuery={boardProjectQuery}
-              allProjectsExpanded={filteredProjectGroups.length > 0 && filteredProjectGroups.every((group) => expandedProjectKeys.includes(group.key))}
+              allGroupsExpanded={boardMode === 'project'
+                ? filteredProjectGroups.length > 0 && filteredProjectGroups.every((group: { key: string }) => expandedProjectKeys.includes(group.key))
+                : boardStatusGroups.length > 0 && boardStatusGroups.every((group: DashboardBoardGroup) => expandedStatusKeys.includes(group.key))}
               onProjectQueryChange={setBoardProjectQuery}
-              onToggleProjectCollapse={() => {
-                const allExpanded = filteredProjectGroups.length > 0 && filteredProjectGroups.every((group) => expandedProjectKeys.includes(group.key));
-                setExpandedProjectKeys(allExpanded ? [] : filteredProjectGroups.map((group) => group.key));
+              onToggleGroupCollapse={() => {
+                if (boardMode === 'project') {
+                  const allExpanded = filteredProjectGroups.length > 0 && filteredProjectGroups.every((group: { key: string }) => expandedProjectKeys.includes(group.key));
+                  setExpandedProjectKeys(allExpanded ? [] : filteredProjectGroups.map((group: { key: string }) => group.key));
+                  return;
+                }
+                const allExpanded = boardStatusGroups.length > 0 && boardStatusGroups.every((group: DashboardBoardGroup) => expandedStatusKeys.includes(group.key));
+                setExpandedStatusKeys(allExpanded ? [] : boardStatusGroups.map((group: DashboardBoardGroup) => group.key));
               }}
               onChangeMode={setBoardMode}
             />
@@ -733,7 +741,7 @@ function App() {
                 : ((group.tasks.length > 0 ? 'plan' : 'muted') as 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board');
               const description = boardMode === 'status'
                 ? boardGroupDescriptions[group.key as TaskStatus]
-                : `${group.tasks.length} 项任务挂在这个项目下，适合集中收线，不用在全局列表里来回找。`;
+                : undefined;
               const isProjectGroup = boardMode === 'project';
               const pinned = isProjectGroup && boardPreferenceData.pinned_projects.includes(group.title);
               const projectIndex = isProjectGroup ? boardProjectGroups.findIndex((item) => item.key === group.key) : -1;
@@ -749,6 +757,8 @@ function App() {
                   && nextProject
                   && boardPreferenceData.pinned_projects.includes(nextProject.title) === pinned,
               );
+              const projectCollapsed = isProjectGroup ? !expandedProjectKeys.includes(group.key) : false;
+              const statusCollapsed = !expandedStatusKeys.includes(group.key);
 
               return (
                 <TaskGroupSection
@@ -760,16 +770,19 @@ function App() {
                   onOpenTask={openTask}
                   variant="board"
                   taskDescriptionMaxLength={boardContentMaxLength}
-                  collapsed={isProjectGroup ? !expandedProjectKeys.includes(group.key) : undefined}
-                  onToggleCollapsed={isProjectGroup ? () => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key])) : undefined}
+                  collapsed={isProjectGroup ? projectCollapsed : statusCollapsed}
+                  onToggleCollapsed={isProjectGroup
+                    ? () => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))
+                    : () => setExpandedStatusKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))}
+                  countLabel={isProjectGroup ? String(group.tasks.length) : `${group.tasks.length} 项`}
+                  showToggleIcon={!isProjectGroup}
                   actions={isProjectGroup ? (
-                    <>
-                      <button type="button" className="mini-icon-button" disabled={!canMoveProjectUp} onClick={() => void handleMoveProjectGroup(group.title, 'up')} aria-label={`上移项目 ${group.title}`}>↑</button>
-                      <button type="button" className="mini-icon-button" disabled={!canMoveProjectDown} onClick={() => void handleMoveProjectGroup(group.title, 'down')} aria-label={`下移项目 ${group.title}`}>↓</button>
-                      <button type="button" className={pinned ? 'chip-button chip-button-active' : 'chip-button'} onClick={() => void handleTogglePinnedProject(group.title)}>
-                        {pinned ? '已置顶' : '置顶'}
-                      </button>
-                    </>
+                    <div className="project-group-actions-grid">
+                      <button type="button" className="mini-icon-button project-group-action-button" disabled={!canMoveProjectUp} onClick={() => void handleMoveProjectGroup(group.title, 'up')} aria-label={`上移项目 ${group.title}`}>↑</button>
+                      <button type="button" className={pinned ? 'mini-icon-button mini-icon-button-active project-group-action-button' : 'mini-icon-button project-group-action-button'} onClick={() => void handleTogglePinnedProject(group.title)} aria-label={pinned ? `取消置顶项目 ${group.title}` : `置顶项目 ${group.title}`}>📌</button>
+                      <button type="button" className="mini-icon-button project-group-action-button" disabled={!canMoveProjectDown} onClick={() => void handleMoveProjectGroup(group.title, 'down')} aria-label={`下移项目 ${group.title}`}>↓</button>
+                      <button type="button" className="mini-icon-button project-group-action-button" onClick={() => setExpandedProjectKeys((prev) => (prev.includes(group.key) ? prev.filter((key) => key !== group.key) : [...prev, group.key]))} aria-label={projectCollapsed ? `展开项目 ${group.title}` : `折叠项目 ${group.title}`}>{projectCollapsed ? '▸' : '▾'}</button>
+                    </div>
                   ) : undefined}
                 />
               );
@@ -1088,6 +1101,8 @@ function TaskGroupSection({
   onToggleCollapsed,
   actions,
   taskDescriptionMaxLength,
+  countLabel,
+  showToggleIcon = true,
 }: {
   title: string;
   description?: string;
@@ -1101,6 +1116,8 @@ function TaskGroupSection({
   onToggleCollapsed?: () => void;
   actions?: JSX.Element;
   taskDescriptionMaxLength?: number;
+  countLabel?: string;
+  showToggleIcon?: boolean;
 }) {
   const [internalCollapsed, setInternalCollapsed] = useState(defaultCollapsed);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -1121,24 +1138,26 @@ function TaskGroupSection({
 
   return (
     <section className={`card-section accent-${accent} ${variant === 'today' ? 'today-group-card' : ''} ${variant === 'board' ? 'board-group-card' : ''}`}>
-      <button
-        type="button"
-        className={`section-heading collapsible-heading ${variant === 'today' ? 'today-group-heading' : ''} ${variant === 'board' ? 'board-group-heading' : ''}`}
-        onClick={toggleCollapsed}
-      >
-        <div className="section-heading-copy">
-          <div className="today-group-title-row">
-            {variant === 'today' && <span className={`today-group-dot today-group-dot-${accent}`}></span>}
-            <strong>{title}</strong>
+      <div className={`section-heading ${variant === 'today' ? 'today-group-heading' : ''} ${variant === 'board' ? 'board-group-heading' : ''}`}>
+        <button
+          type="button"
+          className="section-heading-main collapsible-heading"
+          onClick={toggleCollapsed}
+        >
+          <div className="section-heading-copy">
+            <div className="today-group-title-row">
+              {variant === 'today' && <span className={`today-group-dot today-group-dot-${accent}`}></span>}
+              <strong>{title}</strong>
+            </div>
+            {description ? <span>{description}</span> : variant === 'board' ? null : <span>{tasks.length} 项</span>}
           </div>
-          {description ? <span>{description}</span> : <span>{tasks.length} 项</span>}
-        </div>
+        </button>
         <div className="section-heading-side">
-          {actions ? <span className="group-actions-inline" onClick={(event) => event.stopPropagation()}>{actions}</span> : null}
-          <span className="section-count-badge">{tasks.length} 项</span>
-          <span className="section-toggle-icon">{collapsed ? '+' : '−'}</span>
+          {actions ? <span className="group-actions-inline">{actions}</span> : null}
+          <span className={variant === 'board' && !description ? 'section-count-badge section-count-badge-compact' : 'section-count-badge'}>{countLabel || `${tasks.length} 项`}</span>
+          {showToggleIcon ? <button type="button" className="section-toggle-icon-button" onClick={toggleCollapsed} aria-label={collapsed ? `展开 ${title}` : `折叠 ${title}`}><span className="section-toggle-icon">{collapsed ? '+' : '−'}</span></button> : null}
         </div>
-      </button>
+      </div>
       {!collapsed && (
         <div className="task-list">
           {tasks.length ? tasks.map((task) => <TaskRow key={task.id} task={task} onClick={() => onOpenTask(task)} descriptionMaxLength={variant === 'board' ? taskDescriptionMaxLength : undefined} />) : <EmptyHint label={`暂无${title}`} />}
@@ -1215,17 +1234,17 @@ function BoardHero({
   mode,
   projects,
   projectQuery,
-  allProjectsExpanded,
+  allGroupsExpanded,
   onProjectQueryChange,
-  onToggleProjectCollapse,
+  onToggleGroupCollapse,
   onChangeMode,
 }: {
   mode: BoardMode;
   projects: ProjectSummary[];
   projectQuery: string;
-  allProjectsExpanded: boolean;
+  allGroupsExpanded: boolean;
   onProjectQueryChange: (value: string) => void;
-  onToggleProjectCollapse: () => void;
+  onToggleGroupCollapse: () => void;
   onChangeMode: (mode: BoardMode) => void;
 }) {
   return (
@@ -1237,7 +1256,7 @@ function BoardHero({
           <p>{mode === 'status' ? '先看推进面，再决定今天先动哪一块。' : '搜项目、调顺序、集中把一条线收干净。'}</p>
         </div>
 
-        <div className="board-mode-toolbar" aria-label="看板模式与项目展开控制">
+        <div className="board-mode-toolbar" aria-label="看板模式与分组展开控制">
           <div className="board-segmented board-segmented-compact board-segmented-flex" role="tablist" aria-label="看板分组方式">
             <button
               type="button"
@@ -1259,20 +1278,20 @@ function BoardHero({
             </button>
           </div>
 
-          {mode === 'project' ? (
-            <>
-              <span className="board-mode-toolbar-divider" aria-hidden="true"></span>
-              <button
-                type="button"
-                className="board-mode-toolbar-action"
-                onClick={onToggleProjectCollapse}
-                aria-label={allProjectsExpanded ? '全部折叠项目' : '全部展开项目'}
-                title={allProjectsExpanded ? '全部折叠项目' : '全部展开项目'}
-              >
-                <span aria-hidden="true">{allProjectsExpanded ? '⊟' : '⊞'}</span>
-              </button>
-            </>
-          ) : null}
+          <span className="board-mode-toolbar-divider" aria-hidden="true"></span>
+          <button
+            type="button"
+            className="board-mode-toolbar-action"
+            onClick={onToggleGroupCollapse}
+            aria-label={mode === 'project'
+              ? (allGroupsExpanded ? '全部折叠项目' : '全部展开项目')
+              : (allGroupsExpanded ? '全部折叠状态分组' : '全部展开状态分组')}
+            title={mode === 'project'
+              ? (allGroupsExpanded ? '全部折叠项目' : '全部展开项目')
+              : (allGroupsExpanded ? '全部折叠状态分组' : '全部展开状态分组')}
+          >
+            <span aria-hidden="true">{allGroupsExpanded ? '⊟' : '⊞'}</span>
+          </button>
         </div>
       </div>
 

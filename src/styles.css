@@ -757,6 +757,14 @@ button {
   cursor: pointer;
 }
 
+.section-heading-main {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
 .section-heading-copy {
   flex: 1;
   min-width: 0;
@@ -783,6 +791,7 @@ button {
 .section-count-badge {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   padding: 4px 8px;
   border-radius: 999px;
   background: #f3f6fc;
@@ -790,6 +799,20 @@ button {
   color: var(--muted);
   font-size: 12px;
   font-weight: 700;
+}
+
+.section-count-badge-compact {
+  min-width: 28px;
+  padding: 4px 7px;
+}
+
+.section-toggle-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
 }
 
 .section-toggle-icon {
@@ -1206,6 +1229,7 @@ button {
 .primary-submit {
   padding: 14px 16px;
   border-radius: 16px;
+  border: 1px solid transparent;
   font-weight: 700;
   background: #eef2ff;
   color: var(--brand);
@@ -1641,13 +1665,14 @@ button {
 
 .board-mode-toolbar {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  align-items: stretch;
+  gap: 8px;
   width: 100%;
 }
 
 .board-segmented-compact {
-  max-width: 280px;
+  width: 100%;
+  max-width: none;
 }
 
 .board-segmented-flex {
@@ -1665,8 +1690,9 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  min-width: 44px;
+  height: 48px;
   border-radius: 16px;
   border: 1px solid rgba(214, 223, 239, 0.95);
   background: rgba(255, 255, 255, 0.88);
@@ -1748,15 +1774,21 @@ button {
 .group-actions-inline {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-right: 4px;
+  gap: 8px;
+  margin-right: 0;
 }
 
-.task-row-shell {
-  display: flex;
-  gap: 8px;
-  align-items: stretch;
-  background: transparent;
+.project-group-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  align-items: center;
+  justify-items: center;
+}
+
+.project-group-action-button {
+  width: 30px;
+  height: 30px;
 }
 
 .task-row-button {
@@ -1768,6 +1800,12 @@ button {
   height: 30px;
   border-radius: 10px;
   font-size: 13px;
+}
+
+.mini-icon-button-active {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+  border-color: rgba(49, 87, 225, 0.24);
 }
 
 .mini-icon-button:disabled {
@@ -1897,6 +1935,30 @@ button {
 
 :root[data-theme='dark'] .project-pill {
   background: rgba(111, 141, 255, 0.14);
+}
+
+:root[data-theme='dark'] .action-button {
+  background: rgba(20, 26, 40, 0.92);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .action-primary,
+:root[data-theme='dark'] .primary-submit {
+  background: linear-gradient(180deg, #5576f4, var(--brand));
+  border-color: transparent;
+  color: #fff;
+}
+
+:root[data-theme='dark'] .action-danger,
+:root[data-theme='dark'] .primary-submit-danger {
+  background: rgba(201, 63, 79, 0.18);
+  border-color: rgba(201, 63, 79, 0.28);
+  color: #ffbac3;
+}
+
+:root[data-theme='dark'] .editor-submit-bar {
+  background: linear-gradient(180deg, rgba(15, 20, 32, 0), rgba(15, 20, 32, 0.94) 24%, rgba(15, 20, 32, 0.99));
 }
 
 :root[data-theme='dark'] .board-mode-toolbar-divider {
@@ -2030,16 +2092,23 @@ button {
 }
 
 @media (max-width: 420px) {
-  .task-row-shell {
+  .group-actions-inline {
     gap: 6px;
   }
 
-  .board-hero-actions-inline-compact {
-    gap: 6px;
+  .project-group-actions-grid {
+    gap: 5px;
   }
 
-  .mini-icon-button {
+  .mini-icon-button,
+  .project-group-action-button {
     width: 28px;
     height: 28px;
+  }
+
+  .board-mode-toolbar-action {
+    width: 42px;
+    min-width: 42px;
+    height: 46px;
   }
 }
