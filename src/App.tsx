@@ -1480,10 +1480,13 @@ function MoveArrowIcon({ direction }: { direction: 'up' | 'down' }) {
   return (
     <span
       className={direction === 'up'
-        ? 'project-action-shape project-action-shape-arrow-up'
-        : 'project-action-shape project-action-shape-arrow-down'}
+        ? 'project-action-glyph project-action-glyph-arrow project-action-glyph-arrow-up'
+        : 'project-action-glyph project-action-glyph-arrow project-action-glyph-arrow-down'}
       aria-hidden="true"
-    />
+    >
+      <span className="project-action-glyph-arrow-head" />
+      <span className="project-action-glyph-arrow-shaft" />
+    </span>
   );
 }
 
@@ -1491,10 +1494,13 @@ function PinIcon({ active }: { active: boolean }) {
   return (
     <span
       className={active
-        ? 'project-action-shape project-action-shape-pin project-action-shape-pin-active'
-        : 'project-action-shape project-action-shape-pin project-action-shape-pin-inactive'}
+        ? 'project-action-glyph project-action-glyph-pin project-action-glyph-pin-active'
+        : 'project-action-glyph project-action-glyph-pin project-action-glyph-pin-inactive'}
       aria-hidden="true"
-    />
+    >
+      <span className="project-action-glyph-pin-head" />
+      <span className="project-action-glyph-pin-needle" />
+    </span>
   );
 }
 
