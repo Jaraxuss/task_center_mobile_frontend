@@ -1627,7 +1627,7 @@ button {
 .board-hero-topline {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .board-hero-heading-compact h2 {
@@ -1639,12 +1639,45 @@ button {
   max-width: 32ch;
 }
 
+.board-mode-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
 .board-segmented-compact {
   max-width: 280px;
 }
 
-.board-priority-strip-compact {
-  gap: 8px;
+.board-segmented-flex {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.board-mode-toolbar-divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(214, 223, 239, 0.95);
+}
+
+.board-mode-toolbar-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 16px;
+  border: 1px solid rgba(214, 223, 239, 0.95);
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--brand-strong);
+  box-shadow: var(--shadow-soft);
+  flex-shrink: 0;
+}
+
+.board-mode-toolbar-action span {
+  font-size: 16px;
+  line-height: 1;
 }
 
 .board-hero-tools {
@@ -1654,14 +1687,14 @@ button {
 }
 
 .board-hero-tools-compact {
-  gap: 8px;
+  gap: 6px;
 }
 
 .board-search-shell {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 46px;
+  min-height: 44px;
   padding: 0 12px;
   border-radius: 16px;
   border: 1px solid rgba(214, 223, 239, 0.95);
@@ -1695,23 +1728,6 @@ button {
   border: 1px solid var(--line);
   background: rgba(243, 246, 252, 0.96);
   color: var(--muted-strong);
-}
-
-.board-hero-actions-inline {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.board-hero-actions-inline-compact {
-  align-items: center;
-  justify-content: space-between;
-}
-
-.board-search-meta {
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .ghost-chip,
@@ -1819,6 +1835,74 @@ button {
   margin-top: 8px;
 }
 
+:root[data-theme='dark'] .accent-danger {
+  background: linear-gradient(180deg, rgba(85, 28, 39, 0.36), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(201, 63, 79, 0.2);
+}
+
+:root[data-theme='dark'] .accent-warning {
+  background: linear-gradient(180deg, rgba(92, 61, 18, 0.34), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(183, 121, 31, 0.22);
+}
+
+:root[data-theme='dark'] .accent-brand,
+:root[data-theme='dark'] .accent-board {
+  background: linear-gradient(180deg, rgba(44, 58, 107, 0.34), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(111, 141, 255, 0.2);
+}
+
+:root[data-theme='dark'] .accent-plan {
+  background: linear-gradient(180deg, rgba(68, 64, 134, 0.34), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(99, 102, 241, 0.22);
+}
+
+:root[data-theme='dark'] .accent-muted {
+  background: linear-gradient(180deg, rgba(52, 60, 82, 0.34), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(150, 162, 184, 0.18);
+}
+
+:root[data-theme='dark'] .accent-success {
+  background: linear-gradient(180deg, rgba(19, 78, 54, 0.32), rgba(23, 29, 45, 0.98) 88px);
+  border-color: rgba(23, 130, 79, 0.2);
+}
+
+:root[data-theme='dark'] .today-stat-card,
+:root[data-theme='dark'] .plan-stat-row,
+:root[data-theme='dark'] .summary-strip,
+:root[data-theme='dark'] .empty-hint {
+  background: rgba(20, 26, 40, 0.92);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+:root[data-theme='dark'] .today-stat-card-danger {
+  background: linear-gradient(180deg, rgba(85, 28, 39, 0.32), rgba(20, 26, 40, 0.92));
+}
+
+:root[data-theme='dark'] .today-stat-card-warning {
+  background: linear-gradient(180deg, rgba(92, 61, 18, 0.3), rgba(20, 26, 40, 0.92));
+}
+
+:root[data-theme='dark'] .plan-kicker {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(99, 102, 241, 0.24);
+  color: #b9c2ff;
+}
+
+:root[data-theme='dark'] .plan-stat-value,
+:root[data-theme='dark'] .today-focus-arrow,
+:root[data-theme='dark'] .project-pill {
+  color: var(--brand-strong);
+}
+
+:root[data-theme='dark'] .project-pill {
+  background: rgba(111, 141, 255, 0.14);
+}
+
+:root[data-theme='dark'] .board-mode-toolbar-divider {
+  background: var(--line);
+}
+
 :root[data-theme='dark'] .topbar,
 :root[data-theme='dark'] .bottom-nav,
 :root[data-theme='dark'] .sheet-header {
@@ -1863,6 +1947,7 @@ button {
 :root[data-theme='dark'] .plan-date-chip,
 :root[data-theme='dark'] .board-search-shell,
 :root[data-theme='dark'] .board-search-clear,
+:root[data-theme='dark'] .board-mode-toolbar-action,
 :root[data-theme='dark'] .editor-info-chip,
 :root[data-theme='dark'] .subcard,
 :root[data-theme='dark'] .ghost-button,

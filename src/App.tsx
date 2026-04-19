@@ -707,13 +707,13 @@ function App() {
             <BoardHero
               mode={boardMode}
               projects={projects.data || []}
-              groups={boardMode === 'status' ? boardStatusGroups : boardProjectGroups}
-              tasks={orderedBoardTasks}
               projectQuery={boardProjectQuery}
-              filteredProjectCount={filteredProjectGroups.length}
+              allProjectsExpanded={filteredProjectGroups.length > 0 && filteredProjectGroups.every((group) => expandedProjectKeys.includes(group.key))}
               onProjectQueryChange={setBoardProjectQuery}
-              onExpandAllProjects={() => setExpandedProjectKeys(filteredProjectGroups.map((group) => group.key))}
-              onCollapseAllProjects={() => setExpandedProjectKeys([])}
+              onToggleProjectCollapse={() => {
+                const allExpanded = filteredProjectGroups.length > 0 && filteredProjectGroups.every((group) => expandedProjectKeys.includes(group.key));
+                setExpandedProjectKeys(allExpanded ? [] : filteredProjectGroups.map((group) => group.key));
+              }}
               onChangeMode={setBoardMode}
             />
             {((boardMode === 'status' && board.loading && !board.loaded) || (boardMode === 'project' && allTasks.loading && !allTasks.loaded)) && <StateCard text="看板加载中…" />}
@@ -1214,31 +1214,20 @@ function PlanDaySection({ group, onOpenTask, index = 0 }: { group: PlanGroup; on
 function BoardHero({
   mode,
   projects,
-  groups,
-  tasks,
   projectQuery,
-  filteredProjectCount,
+  allProjectsExpanded,
   onProjectQueryChange,
-  onExpandAllProjects,
-  onCollapseAllProjects,
+  onToggleProjectCollapse,
   onChangeMode,
 }: {
   mode: BoardMode;
   projects: ProjectSummary[];
-  groups: Array<DashboardBoardGroup | { key: string; title: string; tasks: Task[] }>;
-  tasks: Task[];
   projectQuery: string;
-  filteredProjectCount: number;
+  allProjectsExpanded: boolean;
   onProjectQueryChange: (value: string) => void;
-  onExpandAllProjects: () => void;
-  onCollapseAllProjects: () => void;
+  onToggleProjectCollapse: () => void;
   onChangeMode: (mode: BoardMode) => void;
 }) {
-  const openCount = tasks.filter((task) => task.status !== 'done' && task.status !== 'canceled').length;
-  const runningCount = tasks.filter((task) => task.status === 'doing').length;
-  const deferredCount = tasks.filter((task) => task.status === 'deferred').length;
-  const emptyGroups = groups.filter((group) => group.tasks.length === 0).length;
-
   return (
     <section className="today-hero card-section accent-brand-soft board-hero-compact">
       <div className="board-hero-topline">
@@ -1248,48 +1237,46 @@ function BoardHero({
           <p>{mode === 'status' ? '先看推进面，再决定今天先动哪一块。' : '搜项目、调顺序、集中把一条线收干净。'}</p>
         </div>
 
-        <div className="board-segmented board-segmented-compact" role="tablist" aria-label="看板分组方式">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'status'}
-            className={mode === 'status' ? 'board-segment board-segment-active' : 'board-segment'}
-            onClick={() => onChangeMode('status')}
-          >
-            按状态
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={mode === 'project'}
-            className={mode === 'project' ? 'board-segment board-segment-active' : 'board-segment'}
-            onClick={() => onChangeMode('project')}
-          >
-            按项目
-          </button>
+        <div className="board-mode-toolbar" aria-label="看板模式与项目展开控制">
+          <div className="board-segmented board-segmented-compact board-segmented-flex" role="tablist" aria-label="看板分组方式">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'status'}
+              className={mode === 'status' ? 'board-segment board-segment-active' : 'board-segment'}
+              onClick={() => onChangeMode('status')}
+            >
+              按状态
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'project'}
+              className={mode === 'project' ? 'board-segment board-segment-active' : 'board-segment'}
+              onClick={() => onChangeMode('project')}
+            >
+              按项目
+            </button>
+          </div>
+
+          {mode === 'project' ? (
+            <>
+              <span className="board-mode-toolbar-divider" aria-hidden="true"></span>
+              <button
+                type="button"
+                className="board-mode-toolbar-action"
+                onClick={onToggleProjectCollapse}
+                aria-label={allProjectsExpanded ? '全部折叠项目' : '全部展开项目'}
+                title={allProjectsExpanded ? '全部折叠项目' : '全部展开项目'}
+              >
+                <span aria-hidden="true">{allProjectsExpanded ? '⊟' : '⊞'}</span>
+              </button>
+            </>
+          ) : null}
         </div>
       </div>
 
-      <div className="today-priority-strip board-priority-strip board-priority-strip-compact" aria-label="看板概览">
-        <span className="today-priority-chip">
-          <span className="today-priority-chip-label">未收口</span>
-          <strong>{openCount}</strong>
-        </span>
-        <span className="today-priority-chip">
-          <span className="today-priority-chip-label">进行中</span>
-          <strong>{runningCount}</strong>
-        </span>
-        <span className="today-priority-chip">
-          <span className="today-priority-chip-label">已延期</span>
-          <strong>{deferredCount}</strong>
-        </span>
-        <span className="today-priority-chip">
-          <span className="today-priority-chip-label">{mode === 'status' ? '分组' : '项目数'}</span>
-          <strong>{mode === 'status' ? groups.length - emptyGroups : projects.length}</strong>
-        </span>
-      </div>
-
-      {mode === 'project' && (
+      {mode === 'project' && projects.length > 0 ? (
         <div className="board-hero-tools board-hero-tools-compact">
           <div className="board-search-shell">
             <span className="board-search-icon" aria-hidden="true">⌕</span>
@@ -1303,13 +1290,8 @@ function BoardHero({
               <button type="button" className="board-search-clear" onClick={() => onProjectQueryChange('')} aria-label="清空项目搜索">×</button>
             ) : null}
           </div>
-          <div className="board-hero-actions-inline board-hero-actions-inline-compact">
-            <span className="board-search-meta">匹配 {filteredProjectCount} / {projects.length}</span>
-            <button type="button" className="ghost-chip" onClick={onExpandAllProjects}>展开</button>
-            <button type="button" className="ghost-chip" onClick={onCollapseAllProjects}>折叠</button>
-          </div>
         </div>
-      )}
+      ) : null}
     </section>
   );
 }
@@ -1436,21 +1418,19 @@ function TaskRow({
   descriptionMaxLength?: number;
 }) {
   return (
-    <div className="task-row task-row-shell">
-      <button type="button" className="task-row task-row-button" onClick={onClick}>
-        <div className="task-row-main">
-          <div className="task-title">{task.title}</div>
-          <div className="task-meta">
-            <StatusPill status={task.status} />
-            <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
-            {task.project && <span className="project-pill">{task.project}</span>}
-            {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
-          </div>
-          {task.description && <div className="task-desc">{truncateText(task.description, descriptionMaxLength)}</div>}
+    <button type="button" className="task-row task-row-button" onClick={onClick}>
+      <div className="task-row-main">
+        <div className="task-title">{task.title}</div>
+        <div className="task-meta">
+          <StatusPill status={task.status} />
+          <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
+          {task.project && <span className="project-pill">{task.project}</span>}
+          {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
         </div>
-        <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
-      </button>
-    </div>
+        {task.description && <div className="task-desc">{truncateText(task.description, descriptionMaxLength)}</div>}
+      </div>
+      <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
+    </button>
   );
 }
 
