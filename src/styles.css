@@ -1804,22 +1804,29 @@ button {
 }
 
 .project-group-action-button-pin-inactive {
-  color: var(--muted);
+  color: var(--muted-strong);
+  opacity: 0.72;
 }
 
 .project-action-icon {
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   display: block;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  color: inherit;
+}
+
+.project-action-icon-arrow {
+  width: 17px;
+  height: 17px;
 }
 
 .project-action-icon-pin {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
+}
+
+.project-action-icon-pin-inactive {
+  opacity: 0.88;
 }
 
 .task-row-button {
