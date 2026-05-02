@@ -1,6 +1,7 @@
 export type TaskStatus = 'todo' | 'doing' | 'done' | 'deferred' | 'canceled';
 export type TaskSource = 'chat' | 'web' | 'system' | 'seed' | string;
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | string;
+export type CustomerMaterialStatus = 'pending' | 'approved' | 'skipped' | 'uploaded';
 
 export interface Reminder {
   id: number;
@@ -55,6 +56,52 @@ export interface Task {
   recurrence?: TaskRecurrence | null;
   events?: TaskEvent[];
 }
+
+export interface CustomerMaterial {
+  id: number;
+  project: string;
+  title: string;
+  material_date?: string | null;
+  source_type: string;
+  source: string;
+  source_refs: Record<string, unknown>;
+  raw_source_markdown?: string | null;
+  candidate_markdown?: string | null;
+  value_types: string[];
+  status: CustomerMaterialStatus;
+  review_note?: string | null;
+  task_id?: number | null;
+  created_at: string;
+  updated_at: string;
+  archived_at?: string | null;
+}
+
+export interface CustomerMaterialFilters {
+  project?: string;
+  q?: string;
+  status?: CustomerMaterialStatus | '';
+  value_type?: string;
+  task_id?: number;
+  include_archived?: boolean;
+  limit?: number;
+}
+
+export interface CustomerMaterialPayload {
+  project: string;
+  title: string;
+  material_date?: string | null;
+  source_type?: string;
+  source?: string;
+  source_refs?: Record<string, unknown>;
+  raw_source_markdown?: string | null;
+  candidate_markdown?: string | null;
+  value_types?: string[];
+  status?: CustomerMaterialStatus;
+  review_note?: string | null;
+  task_id?: number | null;
+}
+
+export type UpdateCustomerMaterialPayload = Partial<CustomerMaterialPayload> & { clear_task?: boolean };
 
 export interface PlanGroup {
   key: string;

@@ -1921,6 +1921,197 @@ button {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
+.bottom-nav-six {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.bottom-nav-six .nav-item {
+  padding: 7px 3px;
+  font-size: 12px;
+}
+
+.material-hero,
+.material-group-card {
+  overflow: hidden;
+}
+
+.material-filter-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.material-filter-row::-webkit-scrollbar {
+  display: none;
+}
+
+.material-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.material-filter-chip strong {
+  color: var(--text);
+}
+
+.material-filter-chip-active {
+  background: var(--brand-soft);
+  border-color: rgba(49, 87, 225, 0.24);
+  color: var(--brand-strong);
+  font-weight: 700;
+}
+
+.material-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.compact-material-list {
+  margin-bottom: 12px;
+}
+
+.material-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.material-row-compact {
+  padding: 10px;
+}
+
+.material-row-main {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  text-align: left;
+}
+
+.material-row-title-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.material-row-title-line strong {
+  line-height: 1.35;
+}
+
+.material-row-meta,
+.material-value-types {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.material-row-meta span,
+.material-value-types span {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(244, 247, 255, 0.9);
+  color: var(--muted-strong);
+  font-size: 11px;
+}
+
+.material-value-types span {
+  background: var(--plan-soft);
+  color: var(--plan-strong);
+}
+
+.material-row p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.material-row-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.material-row-actions button {
+  padding: 8px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.material-row-actions button:disabled {
+  opacity: 0.55;
+}
+
+.material-row-actions .material-row-danger {
+  color: var(--danger);
+  background: var(--danger-soft);
+  border-color: rgba(201, 63, 79, 0.18);
+}
+
+.material-status-pill {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.material-status-pending {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.material-status-approved {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.material-status-skipped {
+  background: rgba(102, 112, 133, 0.10);
+  color: var(--muted-strong);
+}
+
+.material-status-uploaded {
+  background: var(--brand-soft);
+  color: var(--brand-strong);
+}
+
+.material-value-chip-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.material-editor-sheet textarea {
+  min-height: 120px;
+}
+
 .settings-panel {
   display: flex;
   flex-direction: column;
@@ -2148,6 +2339,27 @@ button {
 :root[data-theme='dark'] .task-row {
   background: linear-gradient(180deg, rgba(24, 31, 48, 0.96), rgba(18, 24, 37, 0.94));
   border-color: rgba(60, 74, 108, 0.8);
+}
+
+:root[data-theme='dark'] .material-row,
+:root[data-theme='dark'] .material-filter-chip {
+  background: rgba(16, 25, 45, 0.88);
+  border-color: rgba(148, 163, 184, 0.16);
+}
+
+:root[data-theme='dark'] .material-row-meta span,
+:root[data-theme='dark'] .material-value-types span {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+:root[data-theme='dark'] .material-filter-chip-active,
+:root[data-theme='dark'] .material-status-uploaded {
+  background: rgba(79, 109, 240, 0.2);
+}
+
+:root[data-theme='dark'] .material-row-actions button {
+  background: rgba(16, 25, 45, 0.92);
+  border-color: rgba(148, 163, 184, 0.16);
 }
 
 :root[data-theme='dark'] .task-row:active {

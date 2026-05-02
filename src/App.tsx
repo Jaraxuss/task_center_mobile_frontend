@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData, usePersistentState } from './hooks';
-import { BoardPreferences, DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateTaskPayload } from './types';
+import { BoardPreferences, CustomerMaterial, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateTaskPayload } from './types';
 import { APP_TIME_ZONE, TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
-type TabKey = 'today' | 'plan' | 'board' | 'history';
+type TabKey = 'today' | 'plan' | 'board' | 'materials' | 'history';
 type BoardMode = 'status' | 'project';
 type ThemeMode = 'light' | 'dark';
 type TaskActionType = 'complete' | 'reschedule' | 'defer' | 'cancel';
 type TaskFormMode = 'create' | 'edit';
+type MaterialFormMode = 'create' | 'edit';
 
 interface ActionSheetState {
   type: TaskActionType;
@@ -30,12 +31,36 @@ interface TaskFormState {
   recurrence_until: string;
 }
 
+interface MaterialFormState {
+  id?: number;
+  project: string;
+  title: string;
+  material_date: string;
+  source_type: string;
+  raw_source_markdown: string;
+  candidate_markdown: string;
+  value_types: string[];
+  status: CustomerMaterialStatus;
+  review_note: string;
+  task_id?: number | null;
+}
+
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'today', label: '今日', icon: '◉' },
   { key: 'plan', label: '计划', icon: '☷' },
   { key: 'board', label: '看板', icon: '▣' },
+  { key: 'materials', label: '材料', icon: '◇' },
   { key: 'history', label: '历史', icon: '↺' },
 ];
+
+const materialStatusLabelMap: Record<CustomerMaterialStatus, string> = {
+  pending: '待审核',
+  approved: '已确认',
+  skipped: '已跳过',
+  uploaded: '已上传',
+};
+
+const materialValueTypeOptions = ['客户需求', '业务流程', '系统限制', '关键人信息', '客户偏好', '风险/阻塞', '解决方案', '商机/增购/续费', '售后问题', '可复用方法论'];
 
 const statusOrder: TaskStatus[] = ['todo', 'doing', 'deferred', 'done', 'canceled'];
 
@@ -144,6 +169,37 @@ function makeTaskFormState(task?: Task | null): TaskFormState {
     recurrence_month_day: recurrence?.day_of_month ? String(recurrence.day_of_month) : '',
     recurrence_until: formatDateTimeInput(recurrence?.end_at || ''),
   };
+}
+
+function makeMaterialFormState(material?: CustomerMaterial | null, task?: Task | null): MaterialFormState {
+  return {
+    id: material?.id,
+    project: material?.project || task?.project || '',
+    title: material?.title || task?.title || '',
+    material_date: formatDateTimeInput(material?.material_date || task?.completed_at || task?.updated_at || new Date().toISOString()),
+    source_type: material?.source_type || 'text',
+    raw_source_markdown: material?.raw_source_markdown || '',
+    candidate_markdown: material?.candidate_markdown || material?.raw_source_markdown || '',
+    value_types: material?.value_types || [],
+    status: material?.status || 'pending',
+    review_note: material?.review_note || '',
+    task_id: material?.task_id ?? task?.id ?? null,
+  };
+}
+
+function groupMaterialsByProject(materials: CustomerMaterial[]) {
+  const map = new Map<string, CustomerMaterial[]>();
+  materials.forEach((material) => {
+    const key = material.project || '未归类';
+    const list = map.get(key) || [];
+    list.push(material);
+    map.set(key, list);
+  });
+  return Array.from(map.entries()).map(([project, list]) => ({
+    key: project,
+    title: project,
+    materials: [...list].sort((a, b) => toDateMillis(b.updated_at) - toDateMillis(a.updated_at)),
+  })).sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
 }
 
 function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): TaskRecurrence | null {
@@ -359,6 +415,9 @@ function App() {
   const [actionSheet, setActionSheet] = useState<ActionSheetState | null>(null);
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
+  const [materialEditorMode, setMaterialEditorMode] = useState<MaterialFormMode | null>(null);
+  const [materialDraft, setMaterialDraft] = useState<MaterialFormState>(makeMaterialFormState());
+  const [materialStatusFilter, setMaterialStatusFilter] = useState<CustomerMaterialStatus | ''>('');
   const [boardProjectQuery, setBoardProjectQuery] = useState('');
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([]);
   const [expandedStatusKeys, setExpandedStatusKeys] = useState<string[]>(statusOrder);
@@ -369,8 +428,18 @@ function App() {
   const plan = useAsyncData(() => api.getPlanDashboard(), [], activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
-  const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
+  const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null || materialEditorMode !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
+  const customerMaterials = useAsyncData(
+    () => api.getCustomerMaterials({ limit: 300 }),
+    [],
+    activeTab === 'materials',
+  );
+  const taskMaterials = useAsyncData(
+    () => (selectedTask ? api.getTaskCustomerMaterials(selectedTask.id) : Promise.resolve([])),
+    [selectedTask?.id],
+    Boolean(selectedTask),
+  );
   const history = useAsyncData(
     () => api.getHistoryDashboard({ q: historyFilters.q || undefined, status: historyFilters.status || undefined, date: historyFilters.date || undefined }),
     [historyFilters.q, historyFilters.status, historyFilters.date],
@@ -397,6 +466,9 @@ function App() {
   const boardGroups = boardMode === 'status' ? boardStatusGroups : visibleProjectGroups;
   const hasMoreProjectGroups = boardMode === 'project' && visibleProjectGroupCount < filteredProjectGroups.length;
   const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
+  const rawMaterialItems = customerMaterials.data || [];
+  const materialItems = useMemo(() => (materialStatusFilter ? rawMaterialItems.filter((material) => material.status === materialStatusFilter) : rawMaterialItems), [rawMaterialItems, materialStatusFilter]);
+  const materialGroups = useMemo(() => groupMaterialsByProject(materialItems), [materialItems]);
   const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
   const visibleHistoryGroups = useMemo(() => historyDateGroups.slice(0, visibleHistoryGroupCount), [historyDateGroups, visibleHistoryGroupCount]);
   const hasMoreHistoryGroups = visibleHistoryGroupCount < historyDateGroups.length;
@@ -533,6 +605,7 @@ function App() {
     if (activeTab === 'today') jobs.push(today.refresh());
     if (activeTab === 'plan') jobs.push(plan.refresh());
     if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh());
+    if (activeTab === 'materials') jobs.push(customerMaterials.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
   }
@@ -647,6 +720,76 @@ function App() {
       await Promise.all([today.refresh(), plan.refresh(), board.refresh(), allTasks.refresh(), history.refresh(), projects.refresh()]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '保存失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function submitMaterialEditor() {
+    const project = materialDraft.project.trim();
+    const title = materialDraft.title.trim();
+    if (!project) {
+      setToast({ text: '客户 / 项目不能为空', tone: 'danger' });
+      return;
+    }
+    if (!title) {
+      setToast({ text: '材料标题不能为空', tone: 'danger' });
+      return;
+    }
+
+    const materialDate = toIsoOrNull(materialDraft.material_date);
+    const payload: UpdateCustomerMaterialPayload = {
+      project,
+      title,
+      material_date: materialDate,
+      source_type: materialDraft.source_type.trim() || 'text',
+      source: 'web',
+      raw_source_markdown: materialDraft.raw_source_markdown.trim() || null,
+      candidate_markdown: materialDraft.candidate_markdown.trim() || null,
+      value_types: materialDraft.value_types,
+      status: materialDraft.status,
+      review_note: materialDraft.review_note.trim() || null,
+      task_id: materialDraft.task_id ?? null,
+    };
+
+    setActionBusy('material');
+    try {
+      if (materialEditorMode === 'edit' && materialDraft.id) {
+        await api.updateCustomerMaterial(materialDraft.id, payload);
+      } else {
+        await api.createCustomerMaterial({ ...payload, project, title });
+      }
+      setMaterialEditorMode(null);
+      setToast({ text: '客户材料已保存', tone: 'success' });
+      await Promise.all([customerMaterials.refresh().catch(() => undefined), taskMaterials.refresh().catch(() => undefined), projects.refresh().catch(() => undefined)]);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '材料保存失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function updateMaterialStatus(material: CustomerMaterial, status: CustomerMaterialStatus) {
+    setActionBusy(`material-${material.id}`);
+    try {
+      await api.updateCustomerMaterial(material.id, { status });
+      setToast({ text: `已标记为${materialStatusLabelMap[status]}`, tone: 'success' });
+      await Promise.all([customerMaterials.refresh().catch(() => undefined), taskMaterials.refresh().catch(() => undefined)]);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '状态更新失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function archiveMaterial(material: CustomerMaterial) {
+    setActionBusy(`material-${material.id}`);
+    try {
+      await api.archiveCustomerMaterial(material.id);
+      setToast({ text: '客户材料已归档', tone: 'success' });
+      await Promise.all([customerMaterials.refresh().catch(() => undefined), taskMaterials.refresh().catch(() => undefined)]);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '归档失败', tone: 'danger' });
     } finally {
       setActionBusy(null);
     }
@@ -818,6 +961,37 @@ function App() {
           </section>
         )}
 
+        {activeTab === 'materials' && (
+          <section className="page">
+            <MaterialsHero
+              materials={rawMaterialItems}
+              statusFilter={materialStatusFilter}
+              onStatusFilterChange={setMaterialStatusFilter}
+              onCreate={() => {
+                setMaterialDraft(makeMaterialFormState(null, selectedTask));
+                setMaterialEditorMode('create');
+              }}
+            />
+            {customerMaterials.loading && !customerMaterials.loaded && <StateCard text="客户材料加载中…" />}
+            {customerMaterials.error && <StateCard text={customerMaterials.error} tone="danger" />}
+            {!customerMaterials.loading && !customerMaterials.error && customerMaterials.loaded && materialItems.length === 0 && <StateCard text="当前没有客户材料。后续客户跟进过程、结果和截图会沉淀到这里。" />}
+            {!customerMaterials.error && materialGroups.map((group) => (
+              <MaterialGroupSection
+                key={group.key}
+                title={group.title}
+                materials={group.materials}
+                busyAction={actionBusy}
+                onEdit={(material) => {
+                  setMaterialDraft(makeMaterialFormState(material));
+                  setMaterialEditorMode('edit');
+                }}
+                onStatusChange={(material, status) => void updateMaterialStatus(material, status)}
+                onArchive={(material) => void archiveMaterial(material)}
+              />
+            ))}
+          </section>
+        )}
+
         {activeTab === 'history' && (
           <section className="page">
             <HistoryHero
@@ -845,7 +1019,7 @@ function App() {
         )}
       </main>
 
-      <nav className="bottom-nav bottom-nav-five">
+      <nav className="bottom-nav bottom-nav-six">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -870,6 +1044,8 @@ function App() {
         <TaskDetailSheet
           task={selectedTask}
           loading={detailLoading}
+          materials={taskMaterials.data || []}
+          materialsLoading={taskMaterials.loading}
           busyAction={actionBusy}
           onClose={() => {
             setSelectedTask(null);
@@ -886,6 +1062,15 @@ function App() {
             setEditorDraft(makeTaskFormState(selectedTask));
             setEditorMode('edit');
           }}
+          onAddMaterial={() => {
+            setMaterialDraft(makeMaterialFormState(null, selectedTask));
+            setMaterialEditorMode('create');
+          }}
+          onEditMaterial={(material) => {
+            setMaterialDraft(makeMaterialFormState(material, selectedTask));
+            setMaterialEditorMode('edit');
+          }}
+          onMaterialStatusChange={(material, status) => void updateMaterialStatus(material, status)}
         />
       )}
 
@@ -962,6 +1147,18 @@ function App() {
           onClose={() => setEditorMode(null)}
           onSubmit={() => void submitEditor()}
           busy={actionBusy === 'create' || actionBusy === 'edit'}
+          projectNames={projectNames}
+        />
+      )}
+
+      {materialEditorMode && (
+        <MaterialEditorSheet
+          mode={materialEditorMode}
+          draft={materialDraft}
+          onChange={setMaterialDraft}
+          onClose={() => setMaterialEditorMode(null)}
+          onSubmit={() => void submitMaterialEditor()}
+          busy={actionBusy === 'material'}
           projectNames={projectNames}
         />
       )}
@@ -1508,6 +1705,149 @@ function StatusPill({ status }: { status: Task['status'] }) {
   return <span className={`status-pill status-${status}`}>{statusLabelMap[status]}</span>;
 }
 
+function MaterialStatusPill({ status }: { status: CustomerMaterialStatus }) {
+  return <span className={`material-status-pill material-status-${status}`}>{materialStatusLabelMap[status]}</span>;
+}
+
+function MaterialsHero({
+  materials,
+  statusFilter,
+  onStatusFilterChange,
+  onCreate,
+}: {
+  materials: CustomerMaterial[];
+  statusFilter: CustomerMaterialStatus | '';
+  onStatusFilterChange: (status: CustomerMaterialStatus | '') => void;
+  onCreate: () => void;
+}) {
+  const counts = materials.reduce<Record<CustomerMaterialStatus, number>>((acc, material) => {
+    acc[material.status] += 1;
+    return acc;
+  }, { pending: 0, approved: 0, skipped: 0, uploaded: 0 });
+
+  return (
+    <section className="module-hero card-section accent-plan material-hero">
+      <div className="module-hero-main">
+        <div className="today-hero-heading">
+          <span className="topbar-kicker today-hero-kicker">customer materials</span>
+          <h2>客户材料审核台</h2>
+          <p>把客户跟进过程、结果和截图沉淀成可编辑的 Markdown，确认后再进入 NotebookLM。</p>
+        </div>
+        <div className="today-hero-actions">
+          <button type="button" className="hero-primary-button hero-action-button" onClick={onCreate}>
+            <div className="hero-action-copy">
+              <span className="hero-action-kicker">手动补充</span>
+              <strong>新增材料</strong>
+            </div>
+            <span className="hero-action-glyph">+</span>
+          </button>
+        </div>
+      </div>
+
+      <div className="material-filter-row" aria-label="客户材料状态筛选">
+        <button type="button" className={statusFilter === '' ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onStatusFilterChange('')}>
+          全部 <strong>{materials.length}</strong>
+        </button>
+        {(Object.keys(materialStatusLabelMap) as CustomerMaterialStatus[]).map((status) => (
+          <button key={status} type="button" className={statusFilter === status ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onStatusFilterChange(status)}>
+            {materialStatusLabelMap[status]} <strong>{counts[status]}</strong>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MaterialGroupSection({
+  title,
+  materials,
+  busyAction,
+  onEdit,
+  onStatusChange,
+  onArchive,
+}: {
+  title: string;
+  materials: CustomerMaterial[];
+  busyAction: string | null;
+  onEdit: (material: CustomerMaterial) => void;
+  onStatusChange: (material: CustomerMaterial, status: CustomerMaterialStatus) => void;
+  onArchive: (material: CustomerMaterial) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <section className="card-section accent-board material-group-card">
+      <div className="section-heading board-group-heading">
+        <button type="button" className="section-heading-main collapsible-heading" onClick={() => setCollapsed((prev) => !prev)}>
+          <div className="section-heading-copy">
+            <strong>{title}</strong>
+            <span>按客户标签聚合，本组 {materials.length} 条材料。</span>
+          </div>
+          <span className="collapse-indicator">{collapsed ? '⌄' : '⌃'}</span>
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="material-list">
+          {materials.map((material) => (
+            <MaterialRow
+              key={material.id}
+              material={material}
+              busy={busyAction === `material-${material.id}`}
+              onEdit={() => onEdit(material)}
+              onStatusChange={(status) => onStatusChange(material, status)}
+              onArchive={() => onArchive(material)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MaterialRow({
+  material,
+  busy,
+  compact = false,
+  onEdit,
+  onStatusChange,
+  onArchive,
+}: {
+  material: CustomerMaterial;
+  busy?: boolean;
+  compact?: boolean;
+  onEdit: () => void;
+  onStatusChange: (status: CustomerMaterialStatus) => void;
+  onArchive?: () => void;
+}) {
+  const preview = material.candidate_markdown || material.raw_source_markdown || '暂无正文';
+  return (
+    <article className={compact ? 'material-row material-row-compact' : 'material-row'}>
+      <button type="button" className="material-row-main" onClick={onEdit}>
+        <div className="material-row-title-line">
+          <strong>{material.title}</strong>
+          <MaterialStatusPill status={material.status} />
+        </div>
+        <div className="material-row-meta">
+          <span>{formatDateTime(material.material_date || material.updated_at)}</span>
+          {material.task_id && <span>任务 #{material.task_id}</span>}
+          <span>{material.source_type}</span>
+        </div>
+        {material.value_types.length > 0 && (
+          <div className="material-value-types">
+            {material.value_types.map((type) => <span key={type}>{type}</span>)}
+          </div>
+        )}
+        <p>{truncateText(preview, compact ? 80 : 160)}</p>
+      </button>
+      <div className="material-row-actions">
+        {material.status !== 'approved' && <button type="button" onClick={() => onStatusChange('approved')} disabled={busy}>确认</button>}
+        {material.status !== 'skipped' && <button type="button" onClick={() => onStatusChange('skipped')} disabled={busy}>跳过</button>}
+        {material.status !== 'uploaded' && <button type="button" onClick={() => onStatusChange('uploaded')} disabled={busy}>已传</button>}
+        {onArchive && <button type="button" className="material-row-danger" onClick={onArchive} disabled={busy}>归档</button>}
+      </div>
+    </article>
+  );
+}
+
 function getLatestFollowupResult(task: Task) {
   if (task.completion_note?.trim()) return task.completion_note.trim();
   const events = task.events || [];
@@ -1522,17 +1862,27 @@ function getLatestFollowupResult(task: Task) {
 function TaskDetailSheet({
   task,
   loading,
+  materials,
+  materialsLoading,
   busyAction,
   onClose,
   onAction,
   onEdit,
+  onAddMaterial,
+  onEditMaterial,
+  onMaterialStatusChange,
 }: {
   task: Task;
   loading: boolean;
+  materials: CustomerMaterial[];
+  materialsLoading: boolean;
   busyAction: string | null;
   onClose: () => void;
   onAction: (type: TaskActionType) => void;
   onEdit: () => void;
+  onAddMaterial: () => void;
+  onEditMaterial: (material: CustomerMaterial) => void;
+  onMaterialStatusChange: (material: CustomerMaterial, status: CustomerMaterialStatus) => void;
 }) {
   const latestFollowupResult = getLatestFollowupResult(task);
 
@@ -1569,6 +1919,31 @@ function TaskDetailSheet({
               <div className="detail-label">描述</div>
               <p>{task.description || '暂无描述'}</p>
             </div>
+          </div>
+
+          <div className="detail-card">
+            <div className="detail-label">客户材料</div>
+            {materialsLoading ? (
+              <div className="helper-text">客户材料加载中…</div>
+            ) : materials.length === 0 ? (
+              <div className="helper-text">暂无关联客户材料。后续客户过程、结果和截图可以沉淀到这里。</div>
+            ) : (
+              <div className="material-list compact-material-list">
+                {materials.map((material) => (
+                  <MaterialRow
+                    key={material.id}
+                    material={material}
+                    busy={busyAction === `material-${material.id}`}
+                    compact
+                    onEdit={() => onEditMaterial(material)}
+                    onStatusChange={(status) => onMaterialStatusChange(material, status)}
+                  />
+                ))}
+              </div>
+            )}
+            <button type="button" className="action-button action-button-span" onClick={onAddMaterial} disabled={busyAction !== null}>
+              + 添加客户材料
+            </button>
           </div>
 
           <div className="detail-card">
@@ -1838,6 +2213,139 @@ function DetailItem({ label, value }: { label: string; value: string }) {
     <div className="detail-item">
       <div className="detail-label">{label}</div>
       <div>{value}</div>
+    </div>
+  );
+}
+
+function MaterialEditorSheet({
+  mode,
+  draft,
+  onChange,
+  onClose,
+  onSubmit,
+  busy,
+  projectNames,
+}: {
+  mode: MaterialFormMode;
+  draft: MaterialFormState;
+  onChange: (value: MaterialFormState) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  busy: boolean;
+  projectNames: string[];
+}) {
+  const toggleValueType = (valueType: string) => {
+    const active = draft.value_types.includes(valueType);
+    onChange({
+      ...draft,
+      value_types: active ? draft.value_types.filter((item) => item !== valueType) : [...draft.value_types, valueType],
+    });
+  };
+
+  return (
+    <div className="overlay">
+      <div className="sheet editor-sheet material-editor-sheet">
+        <div className="sheet-header editor-sheet-header">
+          <button type="button" className="ghost-button" onClick={onClose}>
+            关闭
+          </button>
+          <strong>{mode === 'create' ? '新增客户材料' : '编辑客户材料'}</strong>
+        </div>
+
+        <div className="editor-form">
+          <section className="editor-hero-card material-editor-hero-card">
+            <div className="editor-hero-copy">
+              <span className="topbar-kicker editor-kicker">customer material</span>
+              <h2>{mode === 'create' ? '把客户事实留完整' : '把入库材料修准'}</h2>
+              <p>原始材料负责保真，候选正文负责给 NotebookLM 读取。少总结，多保留过程。</p>
+            </div>
+            <div className="editor-status-row">
+              <span className="editor-info-chip">{materialStatusLabelMap[draft.status]}</span>
+              {draft.task_id && <span className="editor-info-chip">任务 #{draft.task_id}</span>}
+            </div>
+          </section>
+
+          <section className="editor-card editor-card-primary">
+            <label className="editor-field editor-field-title">
+              <span className="editor-label">材料标题</span>
+              <input value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} placeholder="例如：淘宝黄葵胶囊价格监控风控问题" />
+            </label>
+
+            <div className="editor-grid editor-grid-two">
+              <label className="editor-field">
+                <span className="editor-label">客户 / 项目</span>
+                <input list="material-project-options" value={draft.project} onChange={(event) => onChange({ ...draft, project: event.target.value })} placeholder="客户_苏中药业" />
+              </label>
+              <label className="editor-field">
+                <span className="editor-label">发生时间</span>
+                <input type="datetime-local" value={draft.material_date} onChange={(event) => onChange({ ...draft, material_date: event.target.value })} />
+              </label>
+            </div>
+
+            <div className="editor-grid editor-grid-two">
+              <label className="editor-field">
+                <span className="editor-label">来源类型</span>
+                <select value={draft.source_type} onChange={(event) => onChange({ ...draft, source_type: event.target.value })}>
+                  <option value="text">文本</option>
+                  <option value="chat">聊天记录</option>
+                  <option value="screenshot">截图转写</option>
+                  <option value="task_completion">任务完成反馈</option>
+                  <option value="meeting">会议纪要</option>
+                  <option value="doc">文档</option>
+                  <option value="other">其他</option>
+                </select>
+              </label>
+              <label className="editor-field">
+                <span className="editor-label">审核状态</span>
+                <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as CustomerMaterialStatus })}>
+                  <option value="pending">待审核</option>
+                  <option value="approved">已确认</option>
+                  <option value="skipped">已跳过</option>
+                  <option value="uploaded">已上传</option>
+                </select>
+              </label>
+            </div>
+
+            <div className="editor-field">
+              <span className="editor-label">价值类型</span>
+              <div className="option-chip-grid material-value-chip-grid">
+                {materialValueTypeOptions.map((option) => (
+                  <button key={option} type="button" className={draft.value_types.includes(option) ? 'chip chip-active' : 'chip'} onClick={() => toggleValueType(option)}>
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
+
+          <section className="editor-card editor-card-soft">
+            <label className="editor-field editor-field-description">
+              <span className="editor-label">原始材料 Markdown</span>
+              <textarea rows={8} value={draft.raw_source_markdown} onChange={(event) => onChange({ ...draft, raw_source_markdown: event.target.value })} placeholder="保留南哥原话、客户对话、截图转写、消息 ID 等证据材料。" />
+            </label>
+            <label className="editor-field editor-field-description">
+              <span className="editor-label">NotebookLM 候选入库 Markdown</span>
+              <textarea rows={8} value={draft.candidate_markdown} onChange={(event) => onChange({ ...draft, candidate_markdown: event.target.value })} placeholder="轻度清洗系统痕迹，但不要过度总结客户事实。" />
+            </label>
+            <label className="editor-field editor-field-description">
+              <span className="editor-label">审核备注（可选）</span>
+              <textarea rows={3} value={draft.review_note} onChange={(event) => onChange({ ...draft, review_note: event.target.value })} placeholder="比如跳过原因、重复说明、需要补充的点。" />
+            </label>
+          </section>
+        </div>
+
+        <div className="editor-submit-bar">
+          <button type="button" className="primary-submit editor-submit-button" onClick={onSubmit} disabled={busy}>
+            {busy ? '保存中…' : '保存客户材料'}
+          </button>
+        </div>
+
+        <datalist id="material-project-options">
+          {projectNames.map((name) => (
+            <option key={name} value={name} />
+          ))}
+        </datalist>
+      </div>
     </div>
   );
 }

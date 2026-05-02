@@ -1,6 +1,10 @@
 import { API_BASE_URL } from './config';
 import {
   CompleteTaskPayload,
+  CustomerMaterial,
+  CustomerMaterialFilters,
+  CustomerMaterialPayload,
+  CustomerMaterialStatus,
   DashboardBoard,
   DashboardPlan,
   DashboardToday,
@@ -13,6 +17,7 @@ import {
   TaskFilters,
   TaskRecurrence,
   TaskStatus,
+  UpdateCustomerMaterialPayload,
   UpdateTaskPayload,
 } from './types';
 import { currentDateKey, getDateKey, toDateMillis } from './utils';
@@ -41,6 +46,18 @@ function normalizeTaskStatus(status: unknown): TaskStatus {
       return 'canceled';
     default:
       return 'todo';
+  }
+}
+
+function normalizeCustomerMaterialStatus(status: unknown): CustomerMaterialStatus {
+  switch (status) {
+    case 'approved':
+    case 'skipped':
+    case 'uploaded':
+    case 'pending':
+      return status;
+    default:
+      return 'pending';
   }
 }
 
@@ -75,6 +92,18 @@ function toSearchParams(filters?: TaskFilters) {
 
   Object.entries(filters).forEach(([key, value]) => {
     if (value) params.set(key, value);
+  });
+
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
+function toMaterialSearchParams(filters?: CustomerMaterialFilters) {
+  const params = new URLSearchParams();
+  if (!filters) return '';
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
   });
 
   const query = params.toString();
@@ -150,6 +179,27 @@ function normalizeTask(task: any): Task {
       : [],
     recurrence: normalizeRecurrence(task),
     events: Array.isArray(task.events) ? task.events.map(normalizeEvent) : [],
+  };
+}
+
+function normalizeCustomerMaterial(material: any): CustomerMaterial {
+  return {
+    id: Number(material.id),
+    project: String(material.project || ''),
+    title: String(material.title || ''),
+    material_date: material.material_date ?? null,
+    source_type: String(material.source_type || 'text'),
+    source: String(material.source || 'chat'),
+    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : {},
+    raw_source_markdown: material.raw_source_markdown ?? null,
+    candidate_markdown: material.candidate_markdown ?? null,
+    value_types: Array.isArray(material.value_types) ? material.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean) : [],
+    status: normalizeCustomerMaterialStatus(material.status),
+    review_note: material.review_note ?? null,
+    task_id: material.task_id == null ? null : Number(material.task_id),
+    created_at: material.created_at || new Date().toISOString(),
+    updated_at: material.updated_at || new Date().toISOString(),
+    archived_at: material.archived_at ?? null,
   };
 }
 
@@ -237,6 +287,28 @@ export const api = {
   },
   getTask: async (id: number) => normalizeTask(await request<any>(`/api/tasks/${id}`)),
   getTasks: async (filters?: TaskFilters) => (await request<any[]>(`/api/tasks${toSearchParams(filters)}`)).map(normalizeTask),
+  getCustomerMaterials: async (filters?: CustomerMaterialFilters) => (await request<any[]>(`/api/customer-materials${toMaterialSearchParams(filters)}`)).map(normalizeCustomerMaterial),
+  getTaskCustomerMaterials: async (taskId: number) => (await request<any[]>(`/api/tasks/${taskId}/customer-materials`)).map(normalizeCustomerMaterial),
+  createCustomerMaterial: async (payload: CustomerMaterialPayload) =>
+    normalizeCustomerMaterial(
+      await request<any>('/api/customer-materials', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    ),
+  updateCustomerMaterial: async (id: number, payload: UpdateCustomerMaterialPayload) =>
+    normalizeCustomerMaterial(
+      await request<any>(`/api/customer-materials/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    ),
+  archiveCustomerMaterial: async (id: number) =>
+    normalizeCustomerMaterial(
+      await request<any>(`/api/customer-materials/${id}`, {
+        method: 'DELETE',
+      }),
+    ),
   createTask: async (payload: UpdateTaskPayload & { title: string }) =>
     normalizeTask(
       await request<any>(`/api/tasks`, {
