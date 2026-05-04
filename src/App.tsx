@@ -77,6 +77,13 @@ const reviewBatchStatusLabelMap: Record<string, string> = {
   uploaded: '已上传',
 };
 
+const materialTypeLabelMap: Record<string, string> = {
+  period_summary: '周期聚合',
+  fact_bundle: '事实合订',
+  meeting_note: '会议纪要',
+  project_digest: '项目摘要',
+};
+
 const statusOrder: TaskStatus[] = ['todo', 'doing', 'deferred', 'done', 'canceled'];
 
 const BOARD_CONTENT_MAX_MIN = 20;
@@ -1396,7 +1403,7 @@ function App() {
         );
       })()}
 
-      {factDraft && (() => {
+      {factDraft && !selectedTask && (() => {
         const fact = (facts.data || []).find((f) => f.id === factDraft.id) ?? null;
         const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
         return (
@@ -1410,12 +1417,12 @@ function App() {
             onStatusChange={(status) => void updateFactStatusById(factDraft.id, status)}
             onDelete={() => void deleteFactById(factDraft.id)}
             onOpenTask={(taskId) => {
-              setFactDraft(null);
-              void api.getTask(taskId).then((task) => {
-                setSelectedTask(task);
-              }).catch(() => {
-                setToast({ text: '\u65e0\u6cd5\u6253\u5f00\u5173\u8054\u4efb\u52a1', tone: 'danger' });
-              });
+              // Keep factDraft so the fact sheet re-renders after the task sheet is closed.
+              setDetailLoading(true);
+              api.getTask(taskId)
+                .then((task) => setSelectedTask(task))
+                .catch(() => setToast({ text: '\u65e0\u6cd5\u6253\u5f00\u5173\u8054\u4efb\u52a1', tone: 'danger' }))
+                .finally(() => setDetailLoading(false));
             }}
             busy={actionBusy === 'fact' || actionBusy === `fact-${factDraft.id}`}
           />
@@ -2629,13 +2636,8 @@ function MaterialEditorSheet({
           <section className="editor-hero-card material-editor-hero-card">
             <div className="editor-hero-copy">
               <span className="topbar-kicker editor-kicker">customer material</span>
-              <h2>审核本批事实 · 改错字 / 补漏</h2>
-              <p className="editor-card-note">本批材料只展示原始事实，简要纪要 / 洞察由 NotebookLM 在上传后生成。</p>
-            </div>
-            <div className="editor-status-row">
-              <span className="editor-info-chip">{materialStatusLabelMap[draft.status]}</span>
-              {customer && <span className="editor-info-chip">{customer.name}</span>}
-              {batch && <span className="editor-info-chip">{reviewBatchStatusLabelMap[batch.status] || batch.status}</span>}
+              <h2>本批材料原文</h2>
+              <p className="editor-card-note">由 cron 聚合本周期事实拼成；如有错别字、漏写可在此修正。简要纪要 / 洞察由 NotebookLM 上传后生成。</p>
             </div>
           </section>
 
@@ -2646,12 +2648,24 @@ function MaterialEditorSheet({
                 <div className="editor-readonly">{customer?.name || '—'}</div>
               </div>
               <div className="editor-field">
+                <span className="editor-label">项目</span>
+                <div className="editor-readonly">{material?.project || '—'}</div>
+              </div>
+              <div className="editor-field">
                 <span className="editor-label">周期</span>
                 <div className="editor-readonly">{period}</div>
               </div>
               <div className="editor-field">
                 <span className="editor-label">类型</span>
-                <div className="editor-readonly">{material?.material_type || 'period_summary'}</div>
+                <div className="editor-readonly">
+                  {material?.material_type
+                    ? (materialTypeLabelMap[material.material_type] || material.material_type)
+                    : '—'}
+                </div>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">材料状态</span>
+                <div className="editor-readonly">{materialStatusLabelMap[draft.status]}</div>
               </div>
               <div className="editor-field">
                 <span className="editor-label">更新于</span>
@@ -2764,13 +2778,8 @@ function FactEditorSheet({
           <section className="editor-hero-card material-editor-hero-card">
             <div className="editor-hero-copy">
               <span className="topbar-kicker editor-kicker">customer fact</span>
-              <h2>修正事实原文 · 切换状态</h2>
-              <p className="editor-card-note">raw_markdown 是唯一正文字段，审核时只做错别字 / 漏写修正。</p>
-            </div>
-            <div className="editor-status-row">
-              <span className="editor-info-chip">{factStatusLabelMap[draft.status]}</span>
-              {customer && <span className="editor-info-chip">{customer.name}</span>}
-              {fact?.source_type && <span className="editor-info-chip">{fact.source_type}</span>}
+              <h2>事实原文</h2>
+              <p className="editor-card-note">raw_markdown 是事实唯一正文。审核时只做错别字 / 漏写修正。</p>
             </div>
           </section>
 
