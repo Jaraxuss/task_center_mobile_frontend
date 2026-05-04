@@ -2428,3 +2428,89 @@ button {
     height: 46px;
   }
 }
+
+/* Knowledge tab additions (Phase 2) */
+.knowledge-segmented {
+  display: flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.knowledge-segment {
+  flex: 1;
+  text-align: center;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, rgba(15, 23, 42, 0.12));
+  background: var(--color-surface-soft, rgba(15, 23, 42, 0.04));
+  color: var(--color-text, #1f2937);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.knowledge-segment.board-segment-active {
+  background: var(--color-accent-soft, rgba(59, 130, 246, 0.12));
+  border-color: var(--color-accent, #3b82f6);
+  color: var(--color-accent, #3b82f6);
+  font-weight: 600;
+}
+
+.knowledge-segment strong {
+  margin-left: 6px;
+  font-weight: 600;
+}
+
+/* Material / fact editor sheet additions */
+.editor-readonly {
+  display: block;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--color-surface-soft, rgba(15, 23, 42, 0.04));
+  color: var(--color-text-secondary, rgba(15, 23, 42, 0.7));
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 38px;
+}
+
+.material-editor-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.material-editor-actions .editor-submit-button {
+  flex: 1 1 100%;
+}
+
+.material-editor-actions .action-button {
+  flex: 1 1 calc(50% - 4px);
+}
+
+.material-facts-panel .material-list {
+  margin-top: 10px;
+}
+
+.fact-row {
+  background: var(--color-surface-soft, rgba(59, 130, 246, 0.04));
+}
+
+.link-button {
+  background: transparent;
+  border: 0;
+  color: var(--color-accent, #3b82f6);
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+}
+
+.link-button:hover {
+  text-decoration: underline;
+}
+
+/* Fact status pill colors */
+.material-status-pill.material-status-draft { background: rgba(107, 114, 128, 0.16); color: #4b5563; }
+.material-status-pill.material-status-confirmed { background: rgba(16, 185, 129, 0.16); color: #047857; }
+.material-status-pill.material-status-rejected { background: rgba(239, 68, 68, 0.16); color: #b91c1c; }
+.material-status-pill.material-status-archived { background: rgba(107, 114, 128, 0.1); color: #6b7280; }
+

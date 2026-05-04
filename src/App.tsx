@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData, usePersistentState } from './hooks';
-import { BoardPreferences, CustomerMaterial, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, HistoryResponse, PlanGroup, ProjectSummary, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateTaskPayload } from './types';
+import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
 import { APP_TIME_ZONE, TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
-type TabKey = 'today' | 'plan' | 'board' | 'materials' | 'history';
+type TabKey = 'today' | 'plan' | 'board' | 'knowledge' | 'history';
 type BoardMode = 'status' | 'project';
+type KnowledgeMode = 'materials' | 'facts';
 type ThemeMode = 'light' | 'dark';
 type TaskActionType = 'complete' | 'reschedule' | 'defer' | 'cancel';
 type TaskFormMode = 'create' | 'edit';
-type MaterialFormMode = 'create' | 'edit';
 
 interface ActionSheetState {
   type: TaskActionType;
@@ -32,24 +32,26 @@ interface TaskFormState {
 }
 
 interface MaterialFormState {
-  id?: number;
-  project: string;
+  id: number;
   title: string;
-  material_date: string;
-  source_type: string;
-  raw_source_markdown: string;
-  candidate_markdown: string;
-  value_types: string[];
+  raw_facts_markdown: string;
   status: CustomerMaterialStatus;
-  review_note: string;
-  task_id?: number | null;
+}
+
+interface FactFormState {
+  id: number;
+  title: string;
+  raw_markdown: string;
+  fact_date: string;
+  status: FactStatus;
+  value_types: string[];
 }
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'today', label: '今日', icon: '◉' },
   { key: 'plan', label: '计划', icon: '☷' },
   { key: 'board', label: '看板', icon: '▣' },
-  { key: 'materials', label: '材料', icon: '◇' },
+  { key: 'knowledge', label: '知识', icon: '◇' },
   { key: 'history', label: '历史', icon: '↺' },
 ];
 
@@ -60,7 +62,20 @@ const materialStatusLabelMap: Record<CustomerMaterialStatus, string> = {
   uploaded: '已上传',
 };
 
-const materialValueTypeOptions = ['客户需求', '业务流程', '系统限制', '关键人信息', '客户偏好', '风险/阻塞', '解决方案', '商机/增购/续费', '售后问题', '可复用方法论'];
+const factStatusLabelMap: Record<FactStatus, string> = {
+  draft: '草稿',
+  confirmed: '已确认',
+  rejected: '已驳回',
+};
+
+const factValueTypeOptions = ['客户需求', '业务流程', '系统限制', '关键人信息', '客户偏好', '风险/阻塞', '解决方案', '商机/增购/续费', '售后问题', '可复用方法论'];
+
+const reviewBatchStatusLabelMap: Record<string, string> = {
+  pending: '待审核',
+  partial: '部分通过',
+  approved: '已确认',
+  uploaded: '已上传',
+};
 
 const statusOrder: TaskStatus[] = ['todo', 'doing', 'deferred', 'done', 'canceled'];
 
@@ -171,35 +186,100 @@ function makeTaskFormState(task?: Task | null): TaskFormState {
   };
 }
 
-function makeMaterialFormState(material?: CustomerMaterial | null, task?: Task | null): MaterialFormState {
+function makeMaterialFormState(material: CustomerMaterial): MaterialFormState {
   return {
-    id: material?.id,
-    project: material?.project || task?.project || '',
-    title: material?.title || task?.title || '',
-    material_date: formatDateTimeInput(material?.material_date || task?.completed_at || task?.updated_at || new Date().toISOString()),
-    source_type: material?.source_type || 'text',
-    raw_source_markdown: material?.raw_source_markdown || '',
-    candidate_markdown: material?.candidate_markdown || material?.raw_source_markdown || '',
-    value_types: material?.value_types || [],
-    status: material?.status || 'pending',
-    review_note: material?.review_note || '',
-    task_id: material?.task_id ?? task?.id ?? null,
+    id: material.id,
+    title: material.title || '',
+    raw_facts_markdown: material.raw_facts_markdown || '',
+    status: material.status || 'pending',
   };
 }
 
-function groupMaterialsByProject(materials: CustomerMaterial[]) {
-  const map = new Map<string, CustomerMaterial[]>();
-  materials.forEach((material) => {
-    const key = material.project || '未归类';
-    const list = map.get(key) || [];
-    list.push(material);
-    map.set(key, list);
+function makeFactFormState(fact: Fact): FactFormState {
+  return {
+    id: fact.id,
+    title: fact.title || '',
+    raw_markdown: fact.raw_markdown || '',
+    fact_date: formatDateTimeInput(fact.fact_date || ''),
+    status: fact.status || 'draft',
+    value_types: [...(fact.value_types || [])],
+  };
+}
+
+interface MaterialBatchGroup {
+  key: string;
+  batch: ReviewBatch | null;
+  materials: CustomerMaterial[];
+}
+
+function groupMaterialsByBatch(
+  materials: CustomerMaterial[],
+  batches: ReviewBatch[],
+): MaterialBatchGroup[] {
+  const batchMap = new Map<number, ReviewBatch>();
+  batches.forEach((b) => batchMap.set(b.id, b));
+  const grouped = new Map<string, CustomerMaterial[]>();
+  materials.forEach((m) => {
+    const key = m.review_batch_id != null ? `batch-${m.review_batch_id}` : 'unbatched';
+    const list = grouped.get(key) || [];
+    list.push(m);
+    grouped.set(key, list);
   });
-  return Array.from(map.entries()).map(([project, list]) => ({
-    key: project,
-    title: project,
-    materials: [...list].sort((a, b) => toDateMillis(b.updated_at) - toDateMillis(a.updated_at)),
-  })).sort((a, b) => a.title.localeCompare(b.title, 'zh-Hans-CN'));
+  const groups: MaterialBatchGroup[] = Array.from(grouped.entries()).map(([key, list]) => {
+    const batchId = key.startsWith('batch-') ? Number(key.slice('batch-'.length)) : null;
+    const batch = batchId != null ? batchMap.get(batchId) ?? null : null;
+    return {
+      key,
+      batch,
+      materials: [...list].sort((a, b) => toDateMillis(b.updated_at) - toDateMillis(a.updated_at)),
+    };
+  });
+  // sort: batched groups first by period_end desc, then unbatched last
+  groups.sort((a, b) => {
+    if (!a.batch && b.batch) return 1;
+    if (a.batch && !b.batch) return -1;
+    if (!a.batch && !b.batch) return 0;
+    const aEnd = a.batch?.period_end ? toDateMillis(a.batch.period_end) : 0;
+    const bEnd = b.batch?.period_end ? toDateMillis(b.batch.period_end) : 0;
+    return bEnd - aEnd;
+  });
+  return groups;
+}
+
+interface FactCustomerGroup {
+  key: string;
+  title: string;
+  customer: Customer | null;
+  facts: Fact[];
+}
+
+function groupFactsByCustomer(facts: Fact[], customers: Customer[]): FactCustomerGroup[] {
+  const customerMap = new Map<number, Customer>();
+  customers.forEach((c) => customerMap.set(c.id, c));
+  const grouped = new Map<string, Fact[]>();
+  facts.forEach((f) => {
+    const key = f.customer_id != null ? `customer-${f.customer_id}` : 'no-customer';
+    const list = grouped.get(key) || [];
+    list.push(f);
+    grouped.set(key, list);
+  });
+  const groups: FactCustomerGroup[] = Array.from(grouped.entries()).map(([key, list]) => {
+    const cid = key.startsWith('customer-') ? Number(key.slice('customer-'.length)) : null;
+    const customer = cid != null ? customerMap.get(cid) ?? null : null;
+    const title = customer?.name || (cid != null ? `客户 #${cid}` : '未归类');
+    return {
+      key,
+      title,
+      customer,
+      facts: [...list].sort((a, b) => toDateMillis(b.fact_date || b.updated_at) - toDateMillis(a.fact_date || a.updated_at)),
+    };
+  });
+  groups.sort((a, b) => {
+    if (!a.customer && b.customer) return 1;
+    if (a.customer && !b.customer) return -1;
+    return a.title.localeCompare(b.title, 'zh-Hans-CN');
+  });
+  return groups;
 }
 
 function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): TaskRecurrence | null {
@@ -234,17 +314,24 @@ function parseRouteState() {
     return {
       tab: 'today' as TabKey,
       boardMode: 'status' as BoardMode,
+      knowledgeMode: 'materials' as KnowledgeMode,
       historyDraft: { q: '', status: '', date: '' },
     };
   }
 
   const raw = window.location.hash.replace(/^#/, '') || '/today';
   const [pathPart, searchPart = ''] = raw.split('?');
-  const tab = tabs.some((item) => `/${item.key}` === pathPart) ? (pathPart.slice(1) as TabKey) : 'today';
+  // Back-compat: old `#/materials` -> knowledge tab, materials sub-mode
+  let rawTab: string = tabs.some((item) => `/${item.key}` === pathPart) ? pathPart.slice(1) : 'today';
+  if (pathPart === '/materials') rawTab = 'knowledge';
+  const tab = rawTab as TabKey;
   const params = new URLSearchParams(searchPart);
+  const knowledgeModeRaw = params.get('mode');
+  const knowledgeMode: KnowledgeMode = knowledgeModeRaw === 'facts' ? 'facts' : 'materials';
   return {
     tab,
     boardMode: params.get('mode') === 'project' ? ('project' as BoardMode) : ('status' as BoardMode),
+    knowledgeMode,
     historyDraft: {
       q: params.get('q') || '',
       status: params.get('status') || '',
@@ -253,9 +340,15 @@ function parseRouteState() {
   };
 }
 
-function buildHash(tab: TabKey, boardMode: BoardMode, historyFilters: { q: string; status: string; date: string }) {
+function buildHash(
+  tab: TabKey,
+  boardMode: BoardMode,
+  knowledgeMode: KnowledgeMode,
+  historyFilters: { q: string; status: string; date: string },
+) {
   const params = new URLSearchParams();
   if (tab === 'board' && boardMode !== 'status') params.set('mode', boardMode);
+  if (tab === 'knowledge' && knowledgeMode !== 'materials') params.set('mode', knowledgeMode);
   if (tab === 'history') {
     if (historyFilters.q) params.set('q', historyFilters.q);
     if (historyFilters.status) params.set('status', historyFilters.status);
@@ -415,9 +508,13 @@ function App() {
   const [actionSheet, setActionSheet] = useState<ActionSheetState | null>(null);
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
-  const [materialEditorMode, setMaterialEditorMode] = useState<MaterialFormMode | null>(null);
-  const [materialDraft, setMaterialDraft] = useState<MaterialFormState>(makeMaterialFormState());
+  const [materialDraft, setMaterialDraft] = useState<MaterialFormState | null>(null);
   const [materialStatusFilter, setMaterialStatusFilter] = useState<CustomerMaterialStatus | ''>('');
+  const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>(initialRoute.knowledgeMode);
+  const [factDraft, setFactDraft] = useState<FactFormState | null>(null);
+  const [factStatusFilter, setFactStatusFilter] = useState<FactStatus | ''>('');
+  const [materialFactsLoading, setMaterialFactsLoading] = useState(false);
+  const [materialFactIds, setMaterialFactIds] = useState<number[]>([]);
   const [boardProjectQuery, setBoardProjectQuery] = useState('');
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([]);
   const [expandedStatusKeys, setExpandedStatusKeys] = useState<string[]>(statusOrder);
@@ -428,12 +525,27 @@ function App() {
   const plan = useAsyncData(() => api.getPlanDashboard(), [], activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
-  const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null || materialEditorMode !== null);
+  const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const customerMaterials = useAsyncData(
     () => api.getCustomerMaterials({ limit: 300 }),
     [],
-    activeTab === 'materials',
+    activeTab === 'knowledge' && knowledgeMode === 'materials',
+  );
+  const reviewBatches = useAsyncData(
+    () => api.getReviewBatches(),
+    [],
+    activeTab === 'knowledge' && knowledgeMode === 'materials',
+  );
+  const facts = useAsyncData(
+    () => api.getFacts({ limit: 300 }),
+    [],
+    activeTab === 'knowledge' && knowledgeMode === 'facts',
+  );
+  const customers = useAsyncData(
+    () => api.getCustomers(),
+    [],
+    activeTab === 'knowledge',
   );
   const taskMaterials = useAsyncData(
     () => (selectedTask ? api.getTaskCustomerMaterials(selectedTask.id) : Promise.resolve([])),
@@ -468,7 +580,24 @@ function App() {
   const historyItems = useMemo(() => sortTasksByUpdated(history.data?.items || []), [history.data]);
   const rawMaterialItems = customerMaterials.data || [];
   const materialItems = useMemo(() => (materialStatusFilter ? rawMaterialItems.filter((material) => material.status === materialStatusFilter) : rawMaterialItems), [rawMaterialItems, materialStatusFilter]);
-  const materialGroups = useMemo(() => groupMaterialsByProject(materialItems), [materialItems]);
+  const materialGroups = useMemo(
+    () => groupMaterialsByBatch(materialItems, reviewBatches.data || []),
+    [materialItems, reviewBatches.data],
+  );
+  const rawFactItems = facts.data || [];
+  const factItems = useMemo(
+    () => (factStatusFilter ? rawFactItems.filter((fact) => fact.status === factStatusFilter) : rawFactItems),
+    [rawFactItems, factStatusFilter],
+  );
+  const factGroups = useMemo(
+    () => groupFactsByCustomer(factItems, customers.data || []),
+    [factItems, customers.data],
+  );
+  const customerMap = useMemo(() => {
+    const map = new Map<number, Customer>();
+    (customers.data || []).forEach((c) => map.set(c.id, c));
+    return map;
+  }, [customers.data]);
   const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
   const visibleHistoryGroups = useMemo(() => historyDateGroups.slice(0, visibleHistoryGroupCount), [historyDateGroups, visibleHistoryGroupCount]);
   const hasMoreHistoryGroups = visibleHistoryGroupCount < historyDateGroups.length;
@@ -478,6 +607,7 @@ function App() {
       const route = parseRouteState();
       setActiveTab(route.tab);
       setBoardMode(route.boardMode);
+      setKnowledgeMode(route.knowledgeMode);
       setHistoryDraft(route.historyDraft);
       setHistoryFilters(route.historyDraft);
     };
@@ -547,11 +677,11 @@ function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const nextHash = buildHash(activeTab, boardMode, historyFilters);
+    const nextHash = buildHash(activeTab, boardMode, knowledgeMode, historyFilters);
     if (window.location.hash !== nextHash) {
       window.history.replaceState(null, '', nextHash);
     }
-  }, [activeTab, boardMode, historyFilters]);
+  }, [activeTab, boardMode, knowledgeMode, historyFilters]);
 
   useEffect(() => {
     if (!toast) return;
@@ -605,7 +735,8 @@ function App() {
     if (activeTab === 'today') jobs.push(today.refresh());
     if (activeTab === 'plan') jobs.push(plan.refresh());
     if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh());
-    if (activeTab === 'materials') jobs.push(customerMaterials.refresh());
+    if (activeTab === 'knowledge' && knowledgeMode === 'materials') jobs.push(customerMaterials.refresh(), reviewBatches.refresh(), customers.refresh());
+    if (activeTab === 'knowledge' && knowledgeMode === 'facts') jobs.push(facts.refresh(), customers.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
   }
@@ -726,42 +857,26 @@ function App() {
   }
 
   async function submitMaterialEditor() {
-    const project = materialDraft.project.trim();
+    if (!materialDraft) return;
     const title = materialDraft.title.trim();
-    if (!project) {
-      setToast({ text: '客户 / 项目不能为空', tone: 'danger' });
-      return;
-    }
     if (!title) {
       setToast({ text: '材料标题不能为空', tone: 'danger' });
       return;
     }
-
-    const materialDate = toIsoOrNull(materialDraft.material_date);
     const payload: UpdateCustomerMaterialPayload = {
-      project,
       title,
-      material_date: materialDate,
-      source_type: materialDraft.source_type.trim() || 'text',
-      source: 'web',
-      raw_source_markdown: materialDraft.raw_source_markdown.trim() || null,
-      candidate_markdown: materialDraft.candidate_markdown.trim() || null,
-      value_types: materialDraft.value_types,
       status: materialDraft.status,
-      review_note: materialDraft.review_note.trim() || null,
-      task_id: materialDraft.task_id ?? null,
+      raw_facts_markdown: materialDraft.raw_facts_markdown,
     };
-
     setActionBusy('material');
     try {
-      if (materialEditorMode === 'edit' && materialDraft.id) {
-        await api.updateCustomerMaterial(materialDraft.id, payload);
-      } else {
-        await api.createCustomerMaterial({ ...payload, project, title });
-      }
-      setMaterialEditorMode(null);
+      await api.updateCustomerMaterial(materialDraft.id, payload);
+      setMaterialDraft(null);
       setToast({ text: '客户材料已保存', tone: 'success' });
-      await Promise.all([customerMaterials.refresh().catch(() => undefined), taskMaterials.refresh().catch(() => undefined), projects.refresh().catch(() => undefined)]);
+      await Promise.all([
+        customerMaterials.refresh().catch(() => undefined),
+        taskMaterials.refresh().catch(() => undefined),
+      ]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '材料保存失败', tone: 'danger' });
     } finally {
@@ -788,11 +903,96 @@ function App() {
       await api.archiveCustomerMaterial(material.id);
       setToast({ text: '客户材料已归档', tone: 'success' });
       await Promise.all([customerMaterials.refresh().catch(() => undefined), taskMaterials.refresh().catch(() => undefined)]);
+      if (materialDraft && materialDraft.id === material.id) setMaterialDraft(null);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '归档失败', tone: 'danger' });
     } finally {
       setActionBusy(null);
     }
+  }
+
+  async function loadMaterialFactIds(materialId: number) {
+    setMaterialFactsLoading(true);
+    try {
+      const mfs = await api.getMaterialFacts(materialId);
+      setMaterialFactIds(mfs.sort((a, b) => a.sort_order - b.sort_order).map((mf) => mf.fact_id));
+    } catch {
+      setMaterialFactIds([]);
+    } finally {
+      setMaterialFactsLoading(false);
+    }
+  }
+
+  function openMaterialDraft(material: CustomerMaterial) {
+    setMaterialDraft(makeMaterialFormState(material));
+    void loadMaterialFactIds(material.id);
+  }
+
+  async function submitFactEditor() {
+    if (!factDraft) return;
+    const title = factDraft.title.trim();
+    if (!title) {
+      setToast({ text: '事实标题不能为空', tone: 'danger' });
+      return;
+    }
+    const payload: UpdateFactPayload = {
+      title,
+      raw_markdown: factDraft.raw_markdown,
+      fact_date: toIsoOrNull(factDraft.fact_date),
+      status: factDraft.status,
+      value_types: factDraft.value_types,
+    };
+    setActionBusy('fact');
+    try {
+      await api.updateFact(factDraft.id, payload);
+      setFactDraft(null);
+      setToast({ text: '事实已保存', tone: 'success' });
+      await facts.refresh().catch(() => undefined);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '事实保存失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function updateFactStatusById(factId: number, status: FactStatus) {
+    setActionBusy(`fact-${factId}`);
+    try {
+      await api.updateFact(factId, { status });
+      setToast({ text: `事实已标为${factStatusLabelMap[status]}`, tone: 'success' });
+      await facts.refresh().catch(() => undefined);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '状态更新失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function deleteFactById(factId: number) {
+    if (typeof window !== 'undefined' && !window.confirm('确定删除这条事实？')) return;
+    setActionBusy(`fact-${factId}`);
+    try {
+      await api.deleteFact(factId);
+      setFactDraft(null);
+      setToast({ text: '事实已删除', tone: 'success' });
+      await facts.refresh().catch(() => undefined);
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '删除失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  function openFactById(factId: number) {
+    const fact = (facts.data || []).find((f) => f.id === factId);
+    if (fact) {
+      setFactDraft(makeFactFormState(fact));
+      return;
+    }
+    // Fallback: fetch by id if not in cache
+    void api.getFact(factId).then((loaded) => setFactDraft(makeFactFormState(loaded))).catch(() => {
+      setToast({ text: '无法打开事实详情', tone: 'danger' });
+    });
   }
 
   const todayData = today.data;
@@ -961,34 +1161,55 @@ function App() {
           </section>
         )}
 
-        {activeTab === 'materials' && (
+        {activeTab === 'knowledge' && (
           <section className="page">
-            <MaterialsHero
-              materials={rawMaterialItems}
-              statusFilter={materialStatusFilter}
-              onStatusFilterChange={setMaterialStatusFilter}
-              onCreate={() => {
-                setMaterialDraft(makeMaterialFormState(null, selectedTask));
-                setMaterialEditorMode('create');
-              }}
+            <KnowledgeHero
+              mode={knowledgeMode}
+              onChangeMode={setKnowledgeMode}
+              materialCount={rawMaterialItems.length}
+              factCount={rawFactItems.length}
+              statusFilter={knowledgeMode === 'materials' ? materialStatusFilter : ''}
+              onMaterialStatusFilterChange={setMaterialStatusFilter}
+              factStatusFilter={factStatusFilter}
+              onFactStatusFilterChange={setFactStatusFilter}
             />
-            {customerMaterials.loading && !customerMaterials.loaded && <StateCard text="客户材料加载中…" />}
-            {customerMaterials.error && <StateCard text={customerMaterials.error} tone="danger" />}
-            {!customerMaterials.loading && !customerMaterials.error && customerMaterials.loaded && materialItems.length === 0 && <StateCard text="当前没有客户材料。后续客户跟进过程、结果和截图会沉淀到这里。" />}
-            {!customerMaterials.error && materialGroups.map((group) => (
-              <MaterialGroupSection
-                key={group.key}
-                title={group.title}
-                materials={group.materials}
-                busyAction={actionBusy}
-                onEdit={(material) => {
-                  setMaterialDraft(makeMaterialFormState(material));
-                  setMaterialEditorMode('edit');
-                }}
-                onStatusChange={(material, status) => void updateMaterialStatus(material, status)}
-                onArchive={(material) => void archiveMaterial(material)}
-              />
-            ))}
+
+            {knowledgeMode === 'materials' && (
+              <>
+                {customerMaterials.loading && !customerMaterials.loaded && <StateCard text="客户材料加载中…" />}
+                {customerMaterials.error && <StateCard text={customerMaterials.error} tone="danger" />}
+                {!customerMaterials.loading && !customerMaterials.error && customerMaterials.loaded && materialItems.length === 0 && (
+                  <StateCard text="当前没有客户材料。周期材料由周日 20:00 cron 自动生成。" />
+                )}
+                {!customerMaterials.error && materialGroups.map((group) => (
+                  <MaterialBatchGroupSection
+                    key={group.key}
+                    batch={group.batch}
+                    materials={group.materials}
+                    customerMap={customerMap}
+                    onOpen={openMaterialDraft}
+                  />
+                ))}
+              </>
+            )}
+
+            {knowledgeMode === 'facts' && (
+              <>
+                {facts.loading && !facts.loaded && <StateCard text="事实加载中…" />}
+                {facts.error && <StateCard text={facts.error} tone="danger" />}
+                {!facts.loading && !facts.error && facts.loaded && factItems.length === 0 && (
+                  <StateCard text="当前没有客户事实。由主代理在转发 / 截图 / 会议纪要场景写入。" />
+                )}
+                {!facts.error && factGroups.map((group) => (
+                  <FactCustomerGroupSection
+                    key={group.key}
+                    title={group.title}
+                    facts={group.facts}
+                    onOpen={(fact) => setFactDraft(makeFactFormState(fact))}
+                  />
+                ))}
+              </>
+            )}
           </section>
         )}
 
@@ -1062,15 +1283,7 @@ function App() {
             setEditorDraft(makeTaskFormState(selectedTask));
             setEditorMode('edit');
           }}
-          onAddMaterial={() => {
-            setMaterialDraft(makeMaterialFormState(null, selectedTask));
-            setMaterialEditorMode('create');
-          }}
-          onEditMaterial={(material) => {
-            setMaterialDraft(makeMaterialFormState(material, selectedTask));
-            setMaterialEditorMode('edit');
-          }}
-          onMaterialStatusChange={(material, status) => void updateMaterialStatus(material, status)}
+          onEditMaterial={openMaterialDraft}
         />
       )}
 
@@ -1151,17 +1364,63 @@ function App() {
         />
       )}
 
-      {materialEditorMode && (
-        <MaterialEditorSheet
-          mode={materialEditorMode}
-          draft={materialDraft}
-          onChange={setMaterialDraft}
-          onClose={() => setMaterialEditorMode(null)}
-          onSubmit={() => void submitMaterialEditor()}
-          busy={actionBusy === 'material'}
-          projectNames={projectNames}
-        />
-      )}
+      {materialDraft && (() => {
+        const material = rawMaterialItems.find((m) => m.id === materialDraft.id) ?? null;
+        const batch = material?.review_batch_id != null
+          ? (reviewBatches.data || []).find((b) => b.id === material.review_batch_id) ?? null
+          : null;
+        const customer = material?.customer_id != null ? customerMap.get(material.customer_id) ?? null : null;
+        const linkedFacts = materialFactIds
+          .map((fid) => (facts.data || []).find((f) => f.id === fid) ?? null)
+          .filter((f): f is Fact => f !== null);
+        return (
+          <MaterialEditorSheet
+            draft={materialDraft}
+            material={material}
+            batch={batch}
+            customer={customer}
+            linkedFacts={linkedFacts}
+            factsLoading={materialFactsLoading}
+            onChange={(next) => setMaterialDraft(next)}
+            onClose={() => setMaterialDraft(null)}
+            onSubmit={() => void submitMaterialEditor()}
+            onStatusChange={(status) => {
+              if (material) void updateMaterialStatus(material, status);
+            }}
+            onArchive={() => {
+              if (material) void archiveMaterial(material);
+            }}
+            onOpenFact={openFactById}
+            busy={actionBusy === 'material'}
+          />
+        );
+      })()}
+
+      {factDraft && (() => {
+        const fact = (facts.data || []).find((f) => f.id === factDraft.id) ?? null;
+        const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
+        return (
+          <FactEditorSheet
+            draft={factDraft}
+            fact={fact}
+            customer={customer}
+            onChange={(next) => setFactDraft(next)}
+            onClose={() => setFactDraft(null)}
+            onSubmit={() => void submitFactEditor()}
+            onStatusChange={(status) => void updateFactStatusById(factDraft.id, status)}
+            onDelete={() => void deleteFactById(factDraft.id)}
+            onOpenTask={(taskId) => {
+              setFactDraft(null);
+              void api.getTask(taskId).then((task) => {
+                setSelectedTask(task);
+              }).catch(() => {
+                setToast({ text: '\u65e0\u6cd5\u6253\u5f00\u5173\u8054\u4efb\u52a1', tone: 'danger' });
+              });
+            }}
+            busy={actionBusy === 'fact' || actionBusy === `fact-${factDraft.id}`}
+          />
+        );
+      })()}
 
       {toast && <div className={toast.tone === 'danger' ? 'toast toast-danger' : toast.tone === 'success' ? 'toast toast-success' : 'toast'}>{toast.text}</div>}
     </div>
@@ -1709,69 +1968,174 @@ function MaterialStatusPill({ status }: { status: CustomerMaterialStatus }) {
   return <span className={`material-status-pill material-status-${status}`}>{materialStatusLabelMap[status]}</span>;
 }
 
-function MaterialsHero({
-  materials,
+function KnowledgeHero({
+  mode,
+  onChangeMode,
+  materialCount,
+  factCount,
   statusFilter,
-  onStatusFilterChange,
-  onCreate,
+  onMaterialStatusFilterChange,
+  factStatusFilter,
+  onFactStatusFilterChange,
 }: {
-  materials: CustomerMaterial[];
+  mode: KnowledgeMode;
+  onChangeMode: (mode: KnowledgeMode) => void;
+  materialCount: number;
+  factCount: number;
   statusFilter: CustomerMaterialStatus | '';
-  onStatusFilterChange: (status: CustomerMaterialStatus | '') => void;
-  onCreate: () => void;
+  onMaterialStatusFilterChange: (status: CustomerMaterialStatus | '') => void;
+  factStatusFilter: FactStatus | '';
+  onFactStatusFilterChange: (status: FactStatus | '') => void;
 }) {
-  const counts = materials.reduce<Record<CustomerMaterialStatus, number>>((acc, material) => {
-    acc[material.status] += 1;
-    return acc;
-  }, { pending: 0, approved: 0, skipped: 0, uploaded: 0 });
-
   return (
-    <section className="module-hero card-section accent-plan material-hero">
+    <section className="module-hero card-section accent-plan material-hero knowledge-hero">
       <div className="module-hero-main">
         <div className="today-hero-heading">
-          <span className="topbar-kicker today-hero-kicker">customer materials</span>
-          <h2>客户材料审核台</h2>
-          <p>把客户跟进过程、结果和截图沉淀成可编辑的 Markdown，确认后再进入 NotebookLM。</p>
-        </div>
-        <div className="today-hero-actions">
-          <button type="button" className="hero-primary-button hero-action-button" onClick={onCreate}>
-            <div className="hero-action-copy">
-              <span className="hero-action-kicker">手动补充</span>
-              <strong>新增材料</strong>
-            </div>
-            <span className="hero-action-glyph">+</span>
-          </button>
+          <span className="topbar-kicker today-hero-kicker">customer knowledge</span>
+          <h2>{mode === 'materials' ? '周期材料审核' : '客户事实库'}</h2>
+          <p>
+            {mode === 'materials'
+              ? '每周日 20:00 cron 自动聚合 confirmed facts 为周期材料；审核后由主代理上传 NotebookLM。'
+              : '所有客户事实原文保留在这里，随时修正错别字、切换状态或删除误录。'}
+          </p>
         </div>
       </div>
 
-      <div className="material-filter-row" aria-label="客户材料状态筛选">
-        <button type="button" className={statusFilter === '' ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onStatusFilterChange('')}>
-          全部 <strong>{materials.length}</strong>
+      <div className="knowledge-segmented board-segmented board-segmented-compact" role="tablist" aria-label="知识模块分段">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'materials'}
+          className={mode === 'materials' ? 'knowledge-segment board-segment board-segment-active' : 'knowledge-segment board-segment'}
+          onClick={() => onChangeMode('materials')}
+        >
+          材料 <strong>{materialCount}</strong>
         </button>
-        {(Object.keys(materialStatusLabelMap) as CustomerMaterialStatus[]).map((status) => (
-          <button key={status} type="button" className={statusFilter === status ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onStatusFilterChange(status)}>
-            {materialStatusLabelMap[status]} <strong>{counts[status]}</strong>
-          </button>
-        ))}
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === 'facts'}
+          className={mode === 'facts' ? 'knowledge-segment board-segment board-segment-active' : 'knowledge-segment board-segment'}
+          onClick={() => onChangeMode('facts')}
+        >
+          事实 <strong>{factCount}</strong>
+        </button>
       </div>
+
+      {mode === 'materials' ? (
+        <div className="material-filter-row" aria-label="客户材料状态筛选">
+          <button type="button" className={statusFilter === '' ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onMaterialStatusFilterChange('')}>全部</button>
+          {(Object.keys(materialStatusLabelMap) as CustomerMaterialStatus[]).map((status) => (
+            <button key={status} type="button" className={statusFilter === status ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onMaterialStatusFilterChange(status)}>
+              {materialStatusLabelMap[status]}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="material-filter-row" aria-label="事实状态筛选">
+          <button type="button" className={factStatusFilter === '' ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onFactStatusFilterChange('')}>全部</button>
+          {(Object.keys(factStatusLabelMap) as FactStatus[]).map((status) => (
+            <button key={status} type="button" className={factStatusFilter === status ? 'material-filter-chip material-filter-chip-active' : 'material-filter-chip'} onClick={() => onFactStatusFilterChange(status)}>
+              {factStatusLabelMap[status]}
+            </button>
+          ))}
+        </div>
+      )}
     </section>
   );
 }
 
-function MaterialGroupSection({
-  title,
+function MaterialBatchGroupSection({
+  batch,
   materials,
-  busyAction,
-  onEdit,
-  onStatusChange,
-  onArchive,
+  customerMap,
+  onOpen,
+}: {
+  batch: ReviewBatch | null;
+  materials: CustomerMaterial[];
+  customerMap: Map<number, Customer>;
+  onOpen: (material: CustomerMaterial) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const title = batch
+    ? batch.title
+    : '未归批次（旧数据）';
+  const period = batch?.period_start && batch?.period_end
+    ? `${(batch.period_start || '').slice(0, 10)} ~ ${(batch.period_end || '').slice(0, 10)}`
+    : '';
+  return (
+    <section className="card-section accent-board material-group-card">
+      <div className="section-heading board-group-heading">
+        <button type="button" className="section-heading-main collapsible-heading" onClick={() => setCollapsed((prev) => !prev)}>
+          <div className="section-heading-copy">
+            <strong>{title}</strong>
+            <span>
+              {period && <>{period} · </>}
+              {batch && <>{reviewBatchStatusLabelMap[batch.status] || batch.status} · </>}
+              {materials.length} 份材料
+            </span>
+          </div>
+          <span className="collapse-indicator">{collapsed ? '⌄' : '⌃'}</span>
+        </button>
+      </div>
+      {!collapsed && (
+        <div className="material-list">
+          {materials.map((material) => {
+            const customerName = material.customer_id != null
+              ? customerMap.get(material.customer_id)?.name
+              : null;
+            return (
+              <MaterialRowWithCustomer
+                key={material.id}
+                material={material}
+                customerName={customerName || null}
+                onOpen={() => onOpen(material)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MaterialRowWithCustomer({
+  material,
+  customerName,
+  onOpen,
+}: {
+  material: CustomerMaterial;
+  customerName: string | null;
+  onOpen: () => void;
+}) {
+  const preview = material.raw_facts_markdown || '暂无正文';
+  return (
+    <article className="material-row">
+      <button type="button" className="material-row-main" onClick={onOpen}>
+        <div className="material-row-title-line">
+          <strong>{material.title}</strong>
+          <MaterialStatusPill status={material.status} />
+        </div>
+        <div className="material-row-meta">
+          {customerName && <span>{customerName}</span>}
+          {material.period_start && material.period_end && (
+            <span>{(material.period_start || '').slice(0, 10)} ~ {(material.period_end || '').slice(0, 10)}</span>
+          )}
+        </div>
+        <p>{truncateText(preview, 160)}</p>
+      </button>
+    </article>
+  );
+}
+
+function FactCustomerGroupSection({
+  title,
+  facts,
+  onOpen,
 }: {
   title: string;
-  materials: CustomerMaterial[];
-  busyAction: string | null;
-  onEdit: (material: CustomerMaterial) => void;
-  onStatusChange: (material: CustomerMaterial, status: CustomerMaterialStatus) => void;
-  onArchive: (material: CustomerMaterial) => void;
+  facts: Fact[];
+  onOpen: (fact: Fact) => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -1780,22 +2144,15 @@ function MaterialGroupSection({
         <button type="button" className="section-heading-main collapsible-heading" onClick={() => setCollapsed((prev) => !prev)}>
           <div className="section-heading-copy">
             <strong>{title}</strong>
-            <span>按客户标签聚合，本组 {materials.length} 条材料。</span>
+            <span>本组 {facts.length} 条事实</span>
           </div>
           <span className="collapse-indicator">{collapsed ? '⌄' : '⌃'}</span>
         </button>
       </div>
       {!collapsed && (
         <div className="material-list">
-          {materials.map((material) => (
-            <MaterialRow
-              key={material.id}
-              material={material}
-              busy={busyAction === `material-${material.id}`}
-              onEdit={() => onEdit(material)}
-              onStatusChange={(status) => onStatusChange(material, status)}
-              onArchive={() => onArchive(material)}
-            />
+          {facts.map((fact) => (
+            <FactRow key={fact.id} fact={fact} onOpen={() => onOpen(fact)} />
           ))}
         </div>
       )}
@@ -1803,47 +2160,61 @@ function MaterialGroupSection({
   );
 }
 
+function FactRow({ fact, onOpen }: { fact: Fact; onOpen: () => void }) {
+  const preview = fact.raw_markdown || '暂无正文';
+  return (
+    <article className="material-row fact-row">
+      <button type="button" className="material-row-main" onClick={onOpen}>
+        <div className="material-row-title-line">
+          <strong>{fact.title || '（无标题）'}</strong>
+          <FactStatusPill status={fact.status} />
+        </div>
+        <div className="material-row-meta">
+          {fact.fact_date && <span>{(fact.fact_date || '').slice(0, 10)}</span>}
+          {fact.source_type && <span>{fact.source_type}</span>}
+          {fact.task_id != null && <span>任务 #{fact.task_id}</span>}
+        </div>
+        {fact.value_types.length > 0 && (
+          <div className="material-value-types">
+            {fact.value_types.map((type) => <span key={type}>{type}</span>)}
+          </div>
+        )}
+        <p>{truncateText(preview, 140)}</p>
+      </button>
+    </article>
+  );
+}
+
+function FactStatusPill({ status }: { status: FactStatus }) {
+  return <span className={`material-status-pill material-status-${status}`}>{factStatusLabelMap[status]}</span>;
+}
+
 function MaterialRow({
   material,
-  busy,
   compact = false,
-  onEdit,
-  onStatusChange,
-  onArchive,
+  onOpen,
 }: {
   material: CustomerMaterial;
-  busy?: boolean;
   compact?: boolean;
-  onEdit: () => void;
-  onStatusChange: (status: CustomerMaterialStatus) => void;
-  onArchive?: () => void;
+  onOpen: () => void;
 }) {
-  const preview = material.candidate_markdown || material.raw_source_markdown || '暂无正文';
+  const preview = material.raw_facts_markdown || '暂无正文';
+  const period = material.period_start && material.period_end
+    ? `${(material.period_start || '').slice(0, 10)} ~ ${(material.period_end || '').slice(0, 10)}`
+    : formatDateTime(material.material_date || material.updated_at);
   return (
     <article className={compact ? 'material-row material-row-compact' : 'material-row'}>
-      <button type="button" className="material-row-main" onClick={onEdit}>
+      <button type="button" className="material-row-main" onClick={onOpen}>
         <div className="material-row-title-line">
           <strong>{material.title}</strong>
           <MaterialStatusPill status={material.status} />
         </div>
         <div className="material-row-meta">
-          <span>{formatDateTime(material.material_date || material.updated_at)}</span>
-          {material.task_id && <span>任务 #{material.task_id}</span>}
-          <span>{material.source_type}</span>
+          <span>{period}</span>
+          {material.task_id != null && <span>任务 #{material.task_id}</span>}
         </div>
-        {material.value_types.length > 0 && (
-          <div className="material-value-types">
-            {material.value_types.map((type) => <span key={type}>{type}</span>)}
-          </div>
-        )}
         <p>{truncateText(preview, compact ? 80 : 160)}</p>
       </button>
-      <div className="material-row-actions">
-        {material.status !== 'approved' && <button type="button" onClick={() => onStatusChange('approved')} disabled={busy}>确认</button>}
-        {material.status !== 'skipped' && <button type="button" onClick={() => onStatusChange('skipped')} disabled={busy}>跳过</button>}
-        {material.status !== 'uploaded' && <button type="button" onClick={() => onStatusChange('uploaded')} disabled={busy}>已传</button>}
-        {onArchive && <button type="button" className="material-row-danger" onClick={onArchive} disabled={busy}>归档</button>}
-      </div>
     </article>
   );
 }
@@ -1868,9 +2239,7 @@ function TaskDetailSheet({
   onClose,
   onAction,
   onEdit,
-  onAddMaterial,
   onEditMaterial,
-  onMaterialStatusChange,
 }: {
   task: Task;
   loading: boolean;
@@ -1880,9 +2249,7 @@ function TaskDetailSheet({
   onClose: () => void;
   onAction: (type: TaskActionType) => void;
   onEdit: () => void;
-  onAddMaterial: () => void;
   onEditMaterial: (material: CustomerMaterial) => void;
-  onMaterialStatusChange: (material: CustomerMaterial, status: CustomerMaterialStatus) => void;
 }) {
   const latestFollowupResult = getLatestFollowupResult(task);
 
@@ -1910,6 +2277,7 @@ function TaskDetailSheet({
               <DetailItem label="状态" value={statusLabelMap[task.status]} />
               <DetailItem label="安排时间" value={formatDateTime(getTaskScheduleAt(task))} />
               <DetailItem label="项目" value={task.project || '未分项目'} />
+              {task.source_type && <DetailItem label="来源" value={String(task.source_type)} />}
               <DetailItem label="最近更新" value={formatDateTime(task.updated_at)} />
               <DetailItem label="周期" value={task.recurrence?.enabled ? describeRecurrence(task.recurrence) : '单次提醒'} />
               {task.recurrence?.enabled && task.recurrence?.next_run_at && <DetailItem label="下次执行" value={formatDateTime(task.recurrence.next_run_at)} />}
@@ -1926,24 +2294,19 @@ function TaskDetailSheet({
             {materialsLoading ? (
               <div className="helper-text">客户材料加载中…</div>
             ) : materials.length === 0 ? (
-              <div className="helper-text">暂无关联客户材料。后续客户过程、结果和截图可以沉淀到这里。</div>
+              <div className="helper-text">暂无关联客户材料。客户事实会在周日 20:00 自动聚合成周期材料。</div>
             ) : (
               <div className="material-list compact-material-list">
                 {materials.map((material) => (
                   <MaterialRow
                     key={material.id}
                     material={material}
-                    busy={busyAction === `material-${material.id}`}
                     compact
-                    onEdit={() => onEditMaterial(material)}
-                    onStatusChange={(status) => onMaterialStatusChange(material, status)}
+                    onOpen={() => onEditMaterial(material)}
                   />
                 ))}
               </div>
             )}
-            <button type="button" className="action-button action-button-span" onClick={onAddMaterial} disabled={busyAction !== null}>
-              + 添加客户材料
-            </button>
           </div>
 
           <div className="detail-card">
@@ -2218,21 +2581,166 @@ function DetailItem({ label, value }: { label: string; value: string }) {
 }
 
 function MaterialEditorSheet({
-  mode,
   draft,
+  material,
+  batch,
+  customer,
+  linkedFacts,
+  factsLoading,
   onChange,
   onClose,
   onSubmit,
+  onStatusChange,
+  onArchive,
+  onOpenFact,
   busy,
-  projectNames,
 }: {
-  mode: MaterialFormMode;
   draft: MaterialFormState;
+  material: CustomerMaterial | null;
+  batch: ReviewBatch | null;
+  customer: Customer | null;
+  linkedFacts: Fact[];
+  factsLoading: boolean;
   onChange: (value: MaterialFormState) => void;
   onClose: () => void;
   onSubmit: () => void;
+  onStatusChange: (status: CustomerMaterialStatus) => void;
+  onArchive: () => void;
+  onOpenFact: (factId: number) => void;
   busy: boolean;
-  projectNames: string[];
+}) {
+  const period = batch?.period_start && batch?.period_end
+    ? `${(batch.period_start || '').slice(0, 10)} ~ ${(batch.period_end || '').slice(0, 10)}`
+    : (material?.period_start && material?.period_end
+      ? `${(material.period_start || '').slice(0, 10)} ~ ${(material.period_end || '').slice(0, 10)}`
+      : '—');
+  return (
+    <div className="overlay">
+      <div className="sheet editor-sheet material-editor-sheet">
+        <div className="sheet-header editor-sheet-header">
+          <button type="button" className="ghost-button" onClick={onClose}>
+            关闭
+          </button>
+          <strong>客户材料审核</strong>
+          {material && <span className="muted-text">#{material.id}</span>}
+        </div>
+
+        <div className="editor-form">
+          <section className="editor-hero-card material-editor-hero-card">
+            <div className="editor-hero-copy">
+              <span className="topbar-kicker editor-kicker">customer material</span>
+              <h2>审核本批事实 · 改错字 / 补漏</h2>
+              <p className="editor-card-note">本批材料只展示原始事实，简要纪要 / 洞察由 NotebookLM 在上传后生成。</p>
+            </div>
+            <div className="editor-status-row">
+              <span className="editor-info-chip">{materialStatusLabelMap[draft.status]}</span>
+              {customer && <span className="editor-info-chip">{customer.name}</span>}
+              {batch && <span className="editor-info-chip">{reviewBatchStatusLabelMap[batch.status] || batch.status}</span>}
+            </div>
+          </section>
+
+          <section className="editor-card editor-card-primary">
+            <div className="editor-grid editor-grid-two">
+              <div className="editor-field">
+                <span className="editor-label">客户</span>
+                <div className="editor-readonly">{customer?.name || '—'}</div>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">周期</span>
+                <div className="editor-readonly">{period}</div>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">类型</span>
+                <div className="editor-readonly">{material?.material_type || 'period_summary'}</div>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">更新于</span>
+                <div className="editor-readonly">{material ? formatDateTime(material.updated_at) : '—'}</div>
+              </div>
+            </div>
+
+            <label className="editor-field editor-field-title">
+              <span className="editor-label">材料标题</span>
+              <input value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} placeholder="例如：佰世赛｜客户级｜2026-04-27 ~ 2026-05-03" />
+            </label>
+          </section>
+
+          <section className="editor-card editor-card-soft">
+            <label className="editor-field editor-field-description">
+              <span className="editor-label">原始事实 Markdown</span>
+              <textarea rows={16} value={draft.raw_facts_markdown} onChange={(event) => onChange({ ...draft, raw_facts_markdown: event.target.value })} placeholder="按 fact_date 排序后的原文拼接。审核时只做错别字 / 漏写修正。" />
+            </label>
+          </section>
+
+          <section className="editor-card editor-card-soft material-facts-panel">
+            <div className="editor-label">本批材料关联的事实</div>
+            {factsLoading ? (
+              <div className="helper-text">关联事实加载中…</div>
+            ) : linkedFacts.length === 0 ? (
+              <div className="helper-text">暂无关联事实</div>
+            ) : (
+              <div className="material-list compact-material-list">
+                {linkedFacts.map((fact) => (
+                  <article key={fact.id} className="material-row material-row-compact fact-row">
+                    <button type="button" className="material-row-main" onClick={() => onOpenFact(fact.id)}>
+                      <div className="material-row-title-line">
+                        <strong>{fact.title || '（无标题）'}</strong>
+                        <FactStatusPill status={fact.status} />
+                      </div>
+                      <div className="material-row-meta">
+                        {fact.fact_date && <span>{(fact.fact_date || '').slice(0, 10)}</span>}
+                        {fact.source_type && <span>{fact.source_type}</span>}
+                      </div>
+                      <p>{truncateText(fact.raw_markdown, 80)}</p>
+                    </button>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+
+        <div className="editor-submit-bar material-editor-actions">
+          <button type="button" className="primary-submit editor-submit-button" onClick={onSubmit} disabled={busy}>
+            {busy ? '保存中…' : '保存'}
+          </button>
+          <button type="button" className="action-button" onClick={() => onStatusChange('approved')} disabled={busy || draft.status === 'approved'}>
+            通过
+          </button>
+          <button type="button" className="action-button" onClick={() => onStatusChange('skipped')} disabled={busy || draft.status === 'skipped'}>
+            跳过
+          </button>
+          <button type="button" className="action-button action-danger" onClick={onArchive} disabled={busy}>
+            归档
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FactEditorSheet({
+  draft,
+  fact,
+  customer,
+  onChange,
+  onClose,
+  onSubmit,
+  onStatusChange,
+  onDelete,
+  onOpenTask,
+  busy,
+}: {
+  draft: FactFormState;
+  fact: Fact | null;
+  customer: Customer | null;
+  onChange: (value: FactFormState) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  onStatusChange: (status: FactStatus) => void;
+  onDelete: () => void;
+  onOpenTask: (taskId: number) => void;
+  busy: boolean;
 }) {
   const toggleValueType = (valueType: string) => {
     const active = draft.value_types.includes(valueType);
@@ -2241,67 +2749,65 @@ function MaterialEditorSheet({
       value_types: active ? draft.value_types.filter((item) => item !== valueType) : [...draft.value_types, valueType],
     });
   };
-
   return (
     <div className="overlay">
-      <div className="sheet editor-sheet material-editor-sheet">
+      <div className="sheet editor-sheet material-editor-sheet fact-editor-sheet">
         <div className="sheet-header editor-sheet-header">
           <button type="button" className="ghost-button" onClick={onClose}>
             关闭
           </button>
-          <strong>{mode === 'create' ? '新增客户材料' : '编辑客户材料'}</strong>
+          <strong>客户事实</strong>
+          {fact && <span className="muted-text">#{fact.id}</span>}
         </div>
 
         <div className="editor-form">
           <section className="editor-hero-card material-editor-hero-card">
             <div className="editor-hero-copy">
-              <span className="topbar-kicker editor-kicker">customer material</span>
-              <h2>{mode === 'create' ? '把客户事实留完整' : '把入库材料修准'}</h2>
-              <p>原始材料负责保真，候选正文负责给 NotebookLM 读取。少总结，多保留过程。</p>
+              <span className="topbar-kicker editor-kicker">customer fact</span>
+              <h2>修正事实原文 · 切换状态</h2>
+              <p className="editor-card-note">raw_markdown 是唯一正文字段，审核时只做错别字 / 漏写修正。</p>
             </div>
             <div className="editor-status-row">
-              <span className="editor-info-chip">{materialStatusLabelMap[draft.status]}</span>
-              {draft.task_id && <span className="editor-info-chip">任务 #{draft.task_id}</span>}
+              <span className="editor-info-chip">{factStatusLabelMap[draft.status]}</span>
+              {customer && <span className="editor-info-chip">{customer.name}</span>}
+              {fact?.source_type && <span className="editor-info-chip">{fact.source_type}</span>}
             </div>
           </section>
 
           <section className="editor-card editor-card-primary">
+            <div className="editor-grid editor-grid-two">
+              <div className="editor-field">
+                <span className="editor-label">客户</span>
+                <div className="editor-readonly">{customer?.name || '—'}</div>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">关联任务</span>
+                <div className="editor-readonly">
+                  {fact?.task_id != null ? (
+                    <button type="button" className="link-button" onClick={() => onOpenTask(fact.task_id as number)}>
+                      任务 #{fact.task_id} →
+                    </button>
+                  ) : '—'}
+                </div>
+              </div>
+            </div>
+
             <label className="editor-field editor-field-title">
-              <span className="editor-label">材料标题</span>
-              <input value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} placeholder="例如：淘宝黄葵胶囊价格监控风控问题" />
+              <span className="editor-label">事实标题</span>
+              <input value={draft.title} onChange={(event) => onChange({ ...draft, title: event.target.value })} placeholder="例如：客户反馈 xxx" />
             </label>
 
             <div className="editor-grid editor-grid-two">
               <label className="editor-field">
-                <span className="editor-label">客户 / 项目</span>
-                <input list="material-project-options" value={draft.project} onChange={(event) => onChange({ ...draft, project: event.target.value })} placeholder="客户_苏中药业" />
+                <span className="editor-label">事实时间</span>
+                <input type="datetime-local" value={draft.fact_date} onChange={(event) => onChange({ ...draft, fact_date: event.target.value })} />
               </label>
               <label className="editor-field">
-                <span className="editor-label">发生时间</span>
-                <input type="datetime-local" value={draft.material_date} onChange={(event) => onChange({ ...draft, material_date: event.target.value })} />
-              </label>
-            </div>
-
-            <div className="editor-grid editor-grid-two">
-              <label className="editor-field">
-                <span className="editor-label">来源类型</span>
-                <select value={draft.source_type} onChange={(event) => onChange({ ...draft, source_type: event.target.value })}>
-                  <option value="text">文本</option>
-                  <option value="chat">聊天记录</option>
-                  <option value="screenshot">截图转写</option>
-                  <option value="task_completion">任务完成反馈</option>
-                  <option value="meeting">会议纪要</option>
-                  <option value="doc">文档</option>
-                  <option value="other">其他</option>
-                </select>
-              </label>
-              <label className="editor-field">
-                <span className="editor-label">审核状态</span>
-                <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as CustomerMaterialStatus })}>
-                  <option value="pending">待审核</option>
-                  <option value="approved">已确认</option>
-                  <option value="skipped">已跳过</option>
-                  <option value="uploaded">已上传</option>
+                <span className="editor-label">状态</span>
+                <select value={draft.status} onChange={(event) => onChange({ ...draft, status: event.target.value as FactStatus })}>
+                  {(Object.keys(factStatusLabelMap) as FactStatus[]).map((status) => (
+                    <option key={status} value={status}>{factStatusLabelMap[status]}</option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -2309,7 +2815,7 @@ function MaterialEditorSheet({
             <div className="editor-field">
               <span className="editor-label">价值类型</span>
               <div className="option-chip-grid material-value-chip-grid">
-                {materialValueTypeOptions.map((option) => (
+                {factValueTypeOptions.map((option) => (
                   <button key={option} type="button" className={draft.value_types.includes(option) ? 'chip chip-active' : 'chip'} onClick={() => toggleValueType(option)}>
                     {option}
                   </button>
@@ -2320,31 +2826,35 @@ function MaterialEditorSheet({
 
           <section className="editor-card editor-card-soft">
             <label className="editor-field editor-field-description">
-              <span className="editor-label">原始材料 Markdown</span>
-              <textarea rows={8} value={draft.raw_source_markdown} onChange={(event) => onChange({ ...draft, raw_source_markdown: event.target.value })} placeholder="保留南哥原话、客户对话、截图转写、消息 ID 等证据材料。" />
-            </label>
-            <label className="editor-field editor-field-description">
-              <span className="editor-label">NotebookLM 候选入库 Markdown</span>
-              <textarea rows={8} value={draft.candidate_markdown} onChange={(event) => onChange({ ...draft, candidate_markdown: event.target.value })} placeholder="轻度清洗系统痕迹，但不要过度总结客户事实。" />
-            </label>
-            <label className="editor-field editor-field-description">
-              <span className="editor-label">审核备注（可选）</span>
-              <textarea rows={3} value={draft.review_note} onChange={(event) => onChange({ ...draft, review_note: event.target.value })} placeholder="比如跳过原因、重复说明、需要补充的点。" />
+              <span className="editor-label">事实原文 Markdown</span>
+              <textarea rows={14} value={draft.raw_markdown} onChange={(event) => onChange({ ...draft, raw_markdown: event.target.value })} placeholder="保留客户原话、转写、证据截图描述。" />
             </label>
           </section>
         </div>
 
-        <div className="editor-submit-bar">
+        <div className="editor-submit-bar material-editor-actions">
           <button type="button" className="primary-submit editor-submit-button" onClick={onSubmit} disabled={busy}>
-            {busy ? '保存中…' : '保存客户材料'}
+            {busy ? '保存中…' : '保存'}
+          </button>
+          {draft.status !== 'confirmed' && (
+            <button type="button" className="action-button" onClick={() => onStatusChange('confirmed')} disabled={busy}>
+              标为已确认
+            </button>
+          )}
+          {draft.status !== 'draft' && (
+            <button type="button" className="action-button" onClick={() => onStatusChange('draft')} disabled={busy}>
+              标为草稿
+            </button>
+          )}
+          {draft.status !== 'rejected' && (
+            <button type="button" className="action-button" onClick={() => onStatusChange('rejected')} disabled={busy}>
+              标为驳回
+            </button>
+          )}
+          <button type="button" className="action-button action-danger" onClick={onDelete} disabled={busy}>
+            删除
           </button>
         </div>
-
-        <datalist id="material-project-options">
-          {projectNames.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
       </div>
     </div>
   );

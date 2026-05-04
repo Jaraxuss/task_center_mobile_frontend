@@ -1,7 +1,16 @@
 export type TaskStatus = 'todo' | 'doing' | 'done' | 'deferred' | 'canceled';
 export type TaskSource = 'chat' | 'web' | 'system' | 'seed' | string;
+export type TaskSourceType =
+  | 'forwarded_message'
+  | 'screenshot'
+  | 'meeting_note'
+  | 'user_chat'
+  | 'manual_input'
+  | string;
 export type RecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | string;
 export type CustomerMaterialStatus = 'pending' | 'approved' | 'skipped' | 'uploaded';
+export type ReviewBatchStatus = 'pending' | 'partial' | 'approved' | 'uploaded' | string;
+export type FactStatus = 'draft' | 'confirmed' | 'rejected';
 
 export interface Reminder {
   id: number;
@@ -44,8 +53,12 @@ export interface Task {
   due_at?: string | null;
   status: TaskStatus;
   project?: string | null;
+  area?: string | null;
+  customer_id?: number | null;
+  project_id?: number | null;
   tags: string[];
   source?: TaskSource;
+  source_type?: TaskSourceType | null;
   created_at: string;
   updated_at: string;
   completed_at?: string | null;
@@ -59,24 +72,37 @@ export interface Task {
 
 export interface CustomerMaterial {
   id: number;
-  project: string;
   title: string;
-  material_date?: string | null;
-  source_type: string;
-  source: string;
-  source_refs: Record<string, unknown>;
-  raw_source_markdown?: string | null;
-  candidate_markdown?: string | null;
-  value_types: string[];
   status: CustomerMaterialStatus;
-  review_note?: string | null;
-  task_id?: number | null;
   created_at: string;
   updated_at: string;
   archived_at?: string | null;
+
+  // v2 main fields
+  raw_facts_markdown?: string | null;
+  customer_id?: number | null;
+  project_v2_id?: number | null;
+  review_batch_id?: number | null;
+  material_type?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  generation_meta?: Record<string, unknown> | null;
+
+  // legacy metadata fields (kept for backward display)
+  project?: string | null;
+  material_date?: string | null;
+  source_type?: string;
+  source?: string;
+  source_refs?: Record<string, unknown>;
+  value_types?: string[];
+  task_id?: number | null;
 }
 
 export interface CustomerMaterialFilters {
+  customer_id?: number;
+  project_v2_id?: number;
+  review_batch_id?: number;
+  material_type?: string;
   project?: string;
   q?: string;
   status?: CustomerMaterialStatus | '';
@@ -86,22 +112,77 @@ export interface CustomerMaterialFilters {
   limit?: number;
 }
 
-export interface CustomerMaterialPayload {
-  project: string;
-  title: string;
-  material_date?: string | null;
-  source_type?: string;
-  source?: string;
-  source_refs?: Record<string, unknown>;
-  raw_source_markdown?: string | null;
-  candidate_markdown?: string | null;
-  value_types?: string[];
+export interface UpdateCustomerMaterialPayload {
+  title?: string;
   status?: CustomerMaterialStatus;
-  review_note?: string | null;
-  task_id?: number | null;
+  raw_facts_markdown?: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
+  material_type?: string | null;
 }
 
-export type UpdateCustomerMaterialPayload = Partial<CustomerMaterialPayload> & { clear_task?: boolean };
+export interface ReviewBatch {
+  id: number;
+  batch_type: string;
+  title: string;
+  period_start?: string | null;
+  period_end?: string | null;
+  status: ReviewBatchStatus;
+  material_count: number;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Customer {
+  id: number;
+  name: string;
+  area?: string | null;
+  status?: string;
+}
+
+export interface Fact {
+  id: number;
+  title: string;
+  raw_markdown: string;
+  fact_date?: string | null;
+  status: FactStatus;
+  source_type: string;
+  value_types: string[];
+  customer_id?: number | null;
+  project_id?: number | null;
+  task_id?: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FactFilters {
+  customer_id?: number;
+  project_id?: number;
+  task_id?: number;
+  status?: FactStatus | '';
+  source_type?: string;
+  q?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+}
+
+export interface UpdateFactPayload {
+  title?: string;
+  raw_markdown?: string;
+  fact_date?: string | null;
+  status?: FactStatus;
+  value_types?: string[];
+}
+
+export interface CustomerMaterialFact {
+  id: number;
+  material_id: number;
+  fact_id: number;
+  sort_order: number;
+  created_at: string;
+}
 
 export interface PlanGroup {
   key: string;
@@ -171,6 +252,8 @@ export interface UpdateTaskPayload {
   due_at?: string | null;
   status?: TaskStatus;
   project?: string | null;
+  area?: string | null;
+  source_type?: TaskSourceType | null;
   tags?: string[];
   recurrence?: TaskRecurrence | null;
 }

@@ -1,23 +1,29 @@
 import { API_BASE_URL } from './config';
 import {
   CompleteTaskPayload,
+  Customer,
   CustomerMaterial,
+  CustomerMaterialFact,
   CustomerMaterialFilters,
-  CustomerMaterialPayload,
   CustomerMaterialStatus,
   DashboardBoard,
   DashboardPlan,
   DashboardToday,
   DeferTaskPayload,
+  Fact,
+  FactFilters,
+  FactStatus,
   HistoryResponse,
   BoardPreferences,
   ProjectSummary,
+  ReviewBatch,
   Task,
   TaskEvent,
   TaskFilters,
   TaskRecurrence,
   TaskStatus,
   UpdateCustomerMaterialPayload,
+  UpdateFactPayload,
   UpdateTaskPayload,
 } from './types';
 import { currentDateKey, getDateKey, toDateMillis } from './utils';
@@ -110,6 +116,18 @@ function toMaterialSearchParams(filters?: CustomerMaterialFilters) {
   return query ? `?${query}` : '';
 }
 
+function toFactSearchParams(filters?: FactFilters) {
+  const params = new URLSearchParams();
+  if (!filters) return '';
+
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+  });
+
+  const query = params.toString();
+  return query ? `?${query}` : '';
+}
+
 function normalizeEvent(event: Partial<TaskEvent> & { payload?: Record<string, unknown> }): TaskEvent {
   return {
     id: Number(event.id),
@@ -166,8 +184,12 @@ function normalizeTask(task: any): Task {
     due_at: task.due_at ?? null,
     status: normalizeTaskStatus(task.status),
     project: task.project ?? null,
+    area: task.area ?? null,
+    customer_id: task.customer_id == null ? null : Number(task.customer_id),
+    project_id: task.project_id == null ? null : Number(task.project_id),
     tags: Array.isArray(task.tags) ? task.tags : [],
     source: task.source,
+    source_type: task.source_type ?? null,
     created_at: task.created_at,
     updated_at: task.updated_at,
     completed_at: task.completed_at ?? null,
@@ -185,21 +207,97 @@ function normalizeTask(task: any): Task {
 function normalizeCustomerMaterial(material: any): CustomerMaterial {
   return {
     id: Number(material.id),
-    project: String(material.project || ''),
     title: String(material.title || ''),
-    material_date: material.material_date ?? null,
-    source_type: String(material.source_type || 'text'),
-    source: String(material.source || 'chat'),
-    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : {},
-    raw_source_markdown: material.raw_source_markdown ?? null,
-    candidate_markdown: material.candidate_markdown ?? null,
-    value_types: Array.isArray(material.value_types) ? material.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean) : [],
     status: normalizeCustomerMaterialStatus(material.status),
-    review_note: material.review_note ?? null,
-    task_id: material.task_id == null ? null : Number(material.task_id),
     created_at: material.created_at || new Date().toISOString(),
     updated_at: material.updated_at || new Date().toISOString(),
     archived_at: material.archived_at ?? null,
+    // v2 main fields
+    raw_facts_markdown: material.raw_facts_markdown ?? null,
+    customer_id: material.customer_id == null ? null : Number(material.customer_id),
+    project_v2_id: material.project_v2_id == null ? null : Number(material.project_v2_id),
+    review_batch_id: material.review_batch_id == null ? null : Number(material.review_batch_id),
+    material_type: material.material_type ?? null,
+    period_start: material.period_start ?? null,
+    period_end: material.period_end ?? null,
+    generation_meta:
+      material.generation_meta && typeof material.generation_meta === 'object' && !Array.isArray(material.generation_meta)
+        ? material.generation_meta
+        : null,
+    // legacy metadata fields
+    project: material.project ?? null,
+    material_date: material.material_date ?? null,
+    source_type: material.source_type ? String(material.source_type) : undefined,
+    source: material.source ? String(material.source) : undefined,
+    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : undefined,
+    value_types: Array.isArray(material.value_types)
+      ? material.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : undefined,
+    task_id: material.task_id == null ? null : Number(material.task_id),
+  };
+}
+
+function normalizeReviewBatch(batch: any): ReviewBatch {
+  return {
+    id: Number(batch.id),
+    batch_type: String(batch.batch_type || ''),
+    title: String(batch.title || ''),
+    period_start: batch.period_start ?? null,
+    period_end: batch.period_end ?? null,
+    status: String(batch.status || 'pending'),
+    material_count: Number(batch.material_count || 0),
+    created_by: batch.created_by ?? null,
+    created_at: batch.created_at || new Date().toISOString(),
+    updated_at: batch.updated_at || new Date().toISOString(),
+  };
+}
+
+function normalizeCustomer(customer: any): Customer {
+  return {
+    id: Number(customer.id),
+    name: String(customer.name || ''),
+    area: customer.area ?? null,
+    status: customer.status ? String(customer.status) : undefined,
+  };
+}
+
+function normalizeFactStatus(status: unknown): FactStatus {
+  switch (status) {
+    case 'draft':
+    case 'confirmed':
+    case 'rejected':
+      return status;
+    default:
+      return 'draft';
+  }
+}
+
+function normalizeFact(fact: any): Fact {
+  return {
+    id: Number(fact.id),
+    title: String(fact.title || ''),
+    raw_markdown: String(fact.raw_markdown || ''),
+    fact_date: fact.fact_date ?? null,
+    status: normalizeFactStatus(fact.status),
+    source_type: String(fact.source_type || ''),
+    value_types: Array.isArray(fact.value_types)
+      ? fact.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [],
+    customer_id: fact.customer_id == null ? null : Number(fact.customer_id),
+    project_id: fact.project_id == null ? null : Number(fact.project_id),
+    task_id: fact.task_id == null ? null : Number(fact.task_id),
+    created_at: fact.created_at || new Date().toISOString(),
+    updated_at: fact.updated_at || new Date().toISOString(),
+  };
+}
+
+function normalizeMaterialFact(mf: any): CustomerMaterialFact {
+  return {
+    id: Number(mf.id),
+    material_id: Number(mf.material_id),
+    fact_id: Number(mf.fact_id),
+    sort_order: Number(mf.sort_order || 0),
+    created_at: mf.created_at || new Date().toISOString(),
   };
 }
 
@@ -289,13 +387,6 @@ export const api = {
   getTasks: async (filters?: TaskFilters) => (await request<any[]>(`/api/tasks${toSearchParams(filters)}`)).map(normalizeTask),
   getCustomerMaterials: async (filters?: CustomerMaterialFilters) => (await request<any[]>(`/api/customer-materials${toMaterialSearchParams(filters)}`)).map(normalizeCustomerMaterial),
   getTaskCustomerMaterials: async (taskId: number) => (await request<any[]>(`/api/tasks/${taskId}/customer-materials`)).map(normalizeCustomerMaterial),
-  createCustomerMaterial: async (payload: CustomerMaterialPayload) =>
-    normalizeCustomerMaterial(
-      await request<any>('/api/customer-materials', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
-    ),
   updateCustomerMaterial: async (id: number, payload: UpdateCustomerMaterialPayload) =>
     normalizeCustomerMaterial(
       await request<any>(`/api/customer-materials/${id}`, {
@@ -309,6 +400,32 @@ export const api = {
         method: 'DELETE',
       }),
     ),
+  markMaterialUploaded: async (id: number) =>
+    normalizeCustomerMaterial(
+      await request<any>(`/api/customer-materials/${id}/mark-uploaded`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      }),
+    ),
+  getMaterialFacts: async (materialId: number) =>
+    (await request<any[]>(`/api/customer-materials/${materialId}/facts`)).map(normalizeMaterialFact),
+  getReviewBatches: async () => (await request<any[]>(`/api/review-batches`)).map(normalizeReviewBatch),
+  getReviewBatch: async (id: number) => normalizeReviewBatch(await request<any>(`/api/review-batches/${id}`)),
+  getReviewBatchMaterials: async (id: number) =>
+    (await request<any[]>(`/api/review-batches/${id}/customer-materials`)).map(normalizeCustomerMaterial),
+  getCustomers: async () => (await request<any[]>(`/api/customers`)).map(normalizeCustomer),
+  getFacts: async (filters?: FactFilters) => (await request<any[]>(`/api/facts${toFactSearchParams(filters)}`)).map(normalizeFact),
+  getFact: async (id: number) => normalizeFact(await request<any>(`/api/facts/${id}`)),
+  updateFact: async (id: number, payload: UpdateFactPayload) =>
+    normalizeFact(
+      await request<any>(`/api/facts/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    ),
+  deleteFact: async (id: number) => {
+    await request<any>(`/api/facts/${id}`, { method: 'DELETE' });
+  },
   createTask: async (payload: UpdateTaskPayload & { title: string }) =>
     normalizeTask(
       await request<any>(`/api/tasks`, {
