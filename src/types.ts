@@ -174,6 +174,12 @@ export interface UpdateFactPayload {
   fact_date?: string | null;
   status?: FactStatus;
   value_types?: string[];
+  customer_id?: number | null;
+  project_id?: number | null;
+  task_id?: number | null;
+  clear_customer?: boolean;
+  clear_project?: boolean;
+  clear_task?: boolean;
 }
 
 export interface CustomerMaterialFact {

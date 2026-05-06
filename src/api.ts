@@ -415,6 +415,8 @@ export const api = {
     (await request<any[]>(`/api/review-batches/${id}/customer-materials`)).map(normalizeCustomerMaterial),
   getCustomers: async () => (await request<any[]>(`/api/customers`)).map(normalizeCustomer),
   getFacts: async (filters?: FactFilters) => (await request<any[]>(`/api/facts${toFactSearchParams(filters)}`)).map(normalizeFact),
+  getTaskFacts: async (taskId: number) =>
+    (await request<any[]>(`/api/facts${toFactSearchParams({ task_id: taskId, limit: 100 })}`)).map(normalizeFact),
   getFact: async (id: number) => normalizeFact(await request<any>(`/api/facts/${id}`)),
   updateFact: async (id: number, payload: UpdateFactPayload) =>
     normalizeFact(

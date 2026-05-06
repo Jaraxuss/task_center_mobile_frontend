@@ -520,6 +520,8 @@ function App() {
   const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>(initialRoute.knowledgeMode);
   const [factDraft, setFactDraft] = useState<FactFormState | null>(null);
   const [factStatusFilter, setFactStatusFilter] = useState<FactStatus | ''>('');
+  const [factSheetOverTask, setFactSheetOverTask] = useState(false);
+  const [factCustomerPickerOpen, setFactCustomerPickerOpen] = useState(false);
   const [materialFactsLoading, setMaterialFactsLoading] = useState(false);
   const [materialFactIds, setMaterialFactIds] = useState<number[]>([]);
   const [boardProjectQuery, setBoardProjectQuery] = useState('');
@@ -552,10 +554,15 @@ function App() {
   const customers = useAsyncData(
     () => api.getCustomers(),
     [],
-    activeTab === 'knowledge',
+    activeTab === 'knowledge' || factDraft !== null,
   );
   const taskMaterials = useAsyncData(
     () => (selectedTask ? api.getTaskCustomerMaterials(selectedTask.id) : Promise.resolve([])),
+    [selectedTask?.id],
+    Boolean(selectedTask),
+  );
+  const taskFacts = useAsyncData(
+    () => (selectedTask ? api.getTaskFacts(selectedTask.id) : Promise.resolve([])),
     [selectedTask?.id],
     Boolean(selectedTask),
   );
@@ -953,8 +960,12 @@ function App() {
     try {
       await api.updateFact(factDraft.id, payload);
       setFactDraft(null);
+      setFactSheetOverTask(false);
       setToast({ text: '事实已保存', tone: 'success' });
-      await facts.refresh().catch(() => undefined);
+      await Promise.all([
+        facts.refresh().catch(() => undefined),
+        taskFacts.refresh().catch(() => undefined),
+      ]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '事实保存失败', tone: 'danger' });
     } finally {
@@ -967,7 +978,10 @@ function App() {
     try {
       await api.updateFact(factId, { status });
       setToast({ text: `事实已标为${factStatusLabelMap[status]}`, tone: 'success' });
-      await facts.refresh().catch(() => undefined);
+      await Promise.all([
+        facts.refresh().catch(() => undefined),
+        taskFacts.refresh().catch(() => undefined),
+      ]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '状态更新失败', tone: 'danger' });
     } finally {
@@ -981,13 +995,39 @@ function App() {
     try {
       await api.deleteFact(factId);
       setFactDraft(null);
+      setFactSheetOverTask(false);
       setToast({ text: '事实已删除', tone: 'success' });
-      await facts.refresh().catch(() => undefined);
+      await Promise.all([
+        facts.refresh().catch(() => undefined),
+        taskFacts.refresh().catch(() => undefined),
+      ]);
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '删除失败', tone: 'danger' });
     } finally {
       setActionBusy(null);
     }
+  }
+
+  async function updateFactCustomerById(factId: number, customerId: number | null) {
+    setActionBusy(`fact-${factId}`);
+    try {
+      const payload: UpdateFactPayload = customerId == null
+        ? { clear_customer: true }
+        : { customer_id: customerId };
+      const updated = await api.updateFact(factId, payload);
+      setFactDraft((prev) => (prev && prev.id === factId ? prev : prev));
+      setToast({ text: '客户已更新', tone: 'success' });
+      await Promise.all([
+        facts.refresh().catch(() => undefined),
+        taskFacts.refresh().catch(() => undefined),
+      ]);
+      return updated;
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '客户更新失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+    return null;
   }
 
   function openFactById(factId: number) {
@@ -1076,7 +1116,7 @@ function App() {
             />
             {((boardMode === 'status' && board.loading && !board.loaded) || (boardMode === 'project' && allTasks.loading && !allTasks.loaded)) && <StateCard text="看板加载中…" />}
             {(board.error || allTasks.error || boardPreferences.error) && <StateCard text={board.error || allTasks.error || boardPreferences.error || '加载失败'} tone="danger" />}
-            {!board.error && !allTasks.error && !boardPreferences.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text={boardMode === 'project' && boardProjectQuery ? '没有匹配的项目 / 标签' : '当前没有可展示的任务'} />}
+            {!board.error && !allTasks.error && !boardPreferences.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text={boardMode === 'project' && boardProjectQuery ? '没有匹配的客户 / 项目' : '当前没有可展示的任务'} />}
             {!board.error && !allTasks.error && boardGroups.map((group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] }) => {
               const statusAccent = boardMode === 'status'
                 ? ((group.key === 'todo'
@@ -1132,7 +1172,7 @@ function App() {
                         className="mini-icon-button project-group-action-button project-group-action-button-up"
                         disabled={!canMoveProjectUp}
                         onClick={() => void handleMoveProjectGroup(group.title, 'up')}
-                        aria-label={`上移项目 ${group.title}`}
+                        aria-label={`上移客户 ${group.title}`}
                       >
                         <MoveArrowIcon direction="up" />
                       </button>
@@ -1142,7 +1182,7 @@ function App() {
                           ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
                           : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
                         onClick={() => void handleTogglePinnedProject(group.title)}
-                        aria-label={pinned ? `取消置顶项目 ${group.title}` : `置顶项目 ${group.title}`}
+                        aria-label={pinned ? `取消置顶客户 ${group.title}` : `置顶客户 ${group.title}`}
                       >
                         {pinned ? <PinIcon active /> : <PinIcon active={false} />}
                       </button>
@@ -1151,7 +1191,7 @@ function App() {
                         className="mini-icon-button project-group-action-button project-group-action-button-down"
                         disabled={!canMoveProjectDown}
                         onClick={() => void handleMoveProjectGroup(group.title, 'down')}
-                        aria-label={`下移项目 ${group.title}`}
+                        aria-label={`下移客户 ${group.title}`}
                       >
                         <MoveArrowIcon direction="down" />
                       </button>
@@ -1162,7 +1202,7 @@ function App() {
             })}
             {boardMode === 'project' && hasMoreProjectGroups && (
               <div ref={projectLoadMoreRef} className="scroll-load-sentinel" aria-hidden="true">
-                <span className="scroll-load-chip">继续下滑，自动加载更多项目</span>
+                <span className="scroll-load-chip">继续下滑，自动加载更多客户</span>
               </div>
             )}
           </section>
@@ -1268,12 +1308,15 @@ function App() {
         </button>
       </nav>
 
-      {selectedTask && (
+      {selectedTask && !(factDraft && factSheetOverTask) && (
         <TaskDetailSheet
           task={selectedTask}
           loading={detailLoading}
           materials={taskMaterials.data || []}
           materialsLoading={taskMaterials.loading}
+          facts={taskFacts.data || []}
+          factsLoading={taskFacts.loading}
+          customerMap={customerMap}
           busyAction={actionBusy}
           onClose={() => {
             setSelectedTask(null);
@@ -1291,6 +1334,10 @@ function App() {
             setEditorMode('edit');
           }}
           onEditMaterial={openMaterialDraft}
+          onOpenFact={(factId) => {
+            setFactSheetOverTask(true);
+            openFactById(factId);
+          }}
         />
       )}
 
@@ -1403,8 +1450,10 @@ function App() {
         );
       })()}
 
-      {factDraft && !selectedTask && (() => {
-        const fact = (facts.data || []).find((f) => f.id === factDraft.id) ?? null;
+      {factDraft && (factSheetOverTask || !selectedTask) && (() => {
+        const fact = (facts.data || []).find((f) => f.id === factDraft.id)
+          ?? (taskFacts.data || []).find((f) => f.id === factDraft.id)
+          ?? null;
         const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
         return (
           <FactEditorSheet
@@ -1412,22 +1461,43 @@ function App() {
             fact={fact}
             customer={customer}
             onChange={(next) => setFactDraft(next)}
-            onClose={() => setFactDraft(null)}
+            onClose={() => {
+              setFactDraft(null);
+              setFactSheetOverTask(false);
+              setFactCustomerPickerOpen(false);
+            }}
             onSubmit={() => void submitFactEditor()}
             onStatusChange={(status) => void updateFactStatusById(factDraft.id, status)}
             onDelete={() => void deleteFactById(factDraft.id)}
             onOpenTask={(taskId) => {
               // Keep factDraft so the fact sheet re-renders after the task sheet is closed.
+              setFactSheetOverTask(false);
               setDetailLoading(true);
               api.getTask(taskId)
                 .then((task) => setSelectedTask(task))
                 .catch(() => setToast({ text: '\u65e0\u6cd5\u6253\u5f00\u5173\u8054\u4efb\u52a1', tone: 'danger' }))
                 .finally(() => setDetailLoading(false));
             }}
+            onOpenCustomerPicker={() => setFactCustomerPickerOpen(true)}
             busy={actionBusy === 'fact' || actionBusy === `fact-${factDraft.id}`}
           />
         );
       })()}
+
+      {factDraft && factCustomerPickerOpen && (
+        <FactCustomerPickerSheet
+          customers={customers.data || []}
+          currentCustomerId={(facts.data || []).find((f) => f.id === factDraft.id)?.customer_id
+            ?? (taskFacts.data || []).find((f) => f.id === factDraft.id)?.customer_id
+            ?? null}
+          busy={actionBusy === `fact-${factDraft.id}`}
+          onClose={() => setFactCustomerPickerOpen(false)}
+          onSelect={async (customerId) => {
+            await updateFactCustomerById(factDraft.id, customerId);
+            setFactCustomerPickerOpen(false);
+          }}
+        />
+      )}
 
       {toast && <div className={toast.tone === 'danger' ? 'toast toast-danger' : toast.tone === 'success' ? 'toast toast-success' : 'toast'}>{toast.text}</div>}
     </div>
@@ -1738,8 +1808,8 @@ function BoardHero({
       <div className="board-hero-topline">
         <div className="today-hero-heading board-hero-heading-compact">
           <span className="topbar-kicker today-hero-kicker">看板视图</span>
-          <h2>{mode === 'status' ? '按状态扫盘' : '按项目收线'}</h2>
-          <p>{mode === 'status' ? '先看推进面，再决定今天先动哪一块。' : '搜项目、调顺序、集中把一条线收干净。'}</p>
+          <h2>{mode === 'status' ? '按状态扫盘' : '按客户收线'}</h2>
+          <p>{mode === 'status' ? '先看推进面，再决定今天先动哪一块。' : '搜客户、调顺序，把一条线集中收干净。'}</p>
         </div>
 
         <div className="board-mode-toolbar" aria-label="看板模式与分组展开控制">
@@ -1760,7 +1830,7 @@ function BoardHero({
               className={mode === 'project' ? 'board-segment board-segment-active' : 'board-segment'}
               onClick={() => onChangeMode('project')}
             >
-              按项目
+              按客户
             </button>
           </div>
 
@@ -1770,13 +1840,13 @@ function BoardHero({
             className="board-mode-toolbar-action"
             onClick={onToggleGroupCollapse}
             aria-label={mode === 'project'
-              ? (allGroupsExpanded ? '全部折叠项目' : '全部展开项目')
+              ? (allGroupsExpanded ? '全部折叠客户' : '全部展开客户')
               : (allGroupsExpanded ? '全部折叠状态分组' : '全部展开状态分组')}
             title={mode === 'project'
-              ? (allGroupsExpanded ? '全部折叠项目' : '全部展开项目')
+              ? (allGroupsExpanded ? '全部折叠客户' : '全部展开客户')
               : (allGroupsExpanded ? '全部折叠状态分组' : '全部展开状态分组')}
           >
-            <span aria-hidden="true">{allGroupsExpanded ? '⊟' : '⊞'}</span>
+            <ExpandToggleIcon expanded={allGroupsExpanded} />
           </button>
         </div>
       </div>
@@ -1789,10 +1859,10 @@ function BoardHero({
               className="board-search-input"
               value={projectQuery}
               onChange={(event) => onProjectQueryChange(event.target.value)}
-              placeholder="搜索项目 / 标签"
+              placeholder="搜索客户 / 项目"
             />
             {projectQuery ? (
-              <button type="button" className="board-search-clear" onClick={() => onProjectQueryChange('')} aria-label="清空项目搜索">×</button>
+              <button type="button" className="board-search-clear" onClick={() => onProjectQueryChange('')} aria-label="清空客户搜索">×</button>
             ) : null}
           </div>
         </div>
@@ -1940,30 +2010,52 @@ function TaskRow({
 }
 
 function MoveArrowIcon({ direction }: { direction: 'up' | 'down' }) {
+  // Lucide-style chevron-up / chevron-down
   return (
-    <span
-      className={direction === 'up'
-        ? 'project-action-glyph project-action-glyph-arrow project-action-glyph-arrow-up'
-        : 'project-action-glyph project-action-glyph-arrow project-action-glyph-arrow-down'}
-      aria-hidden="true"
-    >
-      <span className="project-action-glyph-arrow-head" />
-      <span className="project-action-glyph-arrow-shaft" />
-    </span>
+    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+      {direction === 'up' ? (
+        <polyline points="6 15 12 9 18 15" />
+      ) : (
+        <polyline points="6 9 12 15 18 9" />
+      )}
+    </svg>
   );
 }
 
 function PinIcon({ active }: { active: boolean }) {
+  // Lucide-style pin: tilted needle with rounded head
   return (
-    <span
-      className={active
-        ? 'project-action-glyph project-action-glyph-pin project-action-glyph-pin-active'
-        : 'project-action-glyph project-action-glyph-pin project-action-glyph-pin-inactive'}
+    <svg
+      className={active ? 'icon-svg icon-svg-pin-active' : 'icon-svg'}
+      viewBox="0 0 24 24"
       aria-hidden="true"
     >
-      <span className="project-action-glyph-pin-head" />
-      <span className="project-action-glyph-pin-needle" />
-    </span>
+      <path d="M12 17v5" />
+      <path d="M9 10.76V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5.76a3 3 0 0 0 1.13 2.34L18 15H6l1.87-1.9A3 3 0 0 0 9 10.76Z" />
+    </svg>
+  );
+}
+
+function ExpandToggleIcon({ expanded }: { expanded: boolean }) {
+  // Lucide-style: minimize-2 when expanded, maximize-2 when collapsed
+  return (
+    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style={{ width: 18, height: 18 }}>
+      {expanded ? (
+        <>
+          <polyline points="4 14 10 14 10 20" />
+          <polyline points="20 10 14 10 14 4" />
+          <line x1="14" y1="10" x2="21" y2="3" />
+          <line x1="3" y1="21" x2="10" y2="14" />
+        </>
+      ) : (
+        <>
+          <polyline points="15 3 21 3 21 9" />
+          <polyline points="9 21 3 21 3 15" />
+          <line x1="21" y1="3" x2="14" y2="10" />
+          <line x1="3" y1="21" x2="10" y2="14" />
+        </>
+      )}
+    </svg>
   );
 }
 
@@ -2196,6 +2288,31 @@ function FactStatusPill({ status }: { status: FactStatus }) {
   return <span className={`material-status-pill material-status-${status}`}>{factStatusLabelMap[status]}</span>;
 }
 
+function CompactFactRow({
+  fact,
+  customerName,
+  onOpen,
+}: {
+  fact: Fact;
+  customerName: string | null;
+  onOpen: () => void;
+}) {
+  return (
+    <article className="material-row material-row-compact fact-row task-fact-row">
+      <button type="button" className="material-row-main task-fact-row-main" onClick={onOpen}>
+        <div className="task-fact-row-line">
+          <strong className="task-fact-row-title">{fact.title || '（无标题）'}</strong>
+          <FactStatusPill status={fact.status} />
+        </div>
+        <div className="task-fact-row-meta">
+          {customerName && <span>{customerName}</span>}
+          {fact.fact_date && <span>{(fact.fact_date || '').slice(0, 10)}</span>}
+        </div>
+      </button>
+    </article>
+  );
+}
+
 function MaterialRow({
   material,
   compact = false,
@@ -2242,21 +2359,29 @@ function TaskDetailSheet({
   loading,
   materials,
   materialsLoading,
+  facts,
+  factsLoading,
+  customerMap,
   busyAction,
   onClose,
   onAction,
   onEdit,
   onEditMaterial,
+  onOpenFact,
 }: {
   task: Task;
   loading: boolean;
   materials: CustomerMaterial[];
   materialsLoading: boolean;
+  facts: Fact[];
+  factsLoading: boolean;
+  customerMap: Map<number, Customer>;
   busyAction: string | null;
   onClose: () => void;
   onAction: (type: TaskActionType) => void;
   onEdit: () => void;
   onEditMaterial: (material: CustomerMaterial) => void;
+  onOpenFact: (factId: number) => void;
 }) {
   const latestFollowupResult = getLatestFollowupResult(task);
 
@@ -2310,6 +2435,26 @@ function TaskDetailSheet({
                     material={material}
                     compact
                     onOpen={() => onEditMaterial(material)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="detail-card">
+            <div className="detail-label">客户事实</div>
+            {factsLoading ? (
+              <div className="helper-text">客户事实加载中…</div>
+            ) : facts.length === 0 ? (
+              <div className="helper-text">暂无关联客户事实。客户事实由主代理在转发 / 截图 / 会议纪要场景写入。</div>
+            ) : (
+              <div className="material-list compact-material-list task-fact-list">
+                {facts.map((fact) => (
+                  <CompactFactRow
+                    key={fact.id}
+                    fact={fact}
+                    customerName={fact.customer_id != null ? customerMap.get(fact.customer_id)?.name ?? null : null}
+                    onOpen={() => onOpenFact(fact.id)}
                   />
                 ))}
               </div>
@@ -2743,6 +2888,7 @@ function FactEditorSheet({
   onStatusChange,
   onDelete,
   onOpenTask,
+  onOpenCustomerPicker,
   busy,
 }: {
   draft: FactFormState;
@@ -2754,6 +2900,7 @@ function FactEditorSheet({
   onStatusChange: (status: FactStatus) => void;
   onDelete: () => void;
   onOpenTask: (taskId: number) => void;
+  onOpenCustomerPicker: () => void;
   busy: boolean;
 }) {
   const toggleValueType = (valueType: string) => {
@@ -2787,7 +2934,16 @@ function FactEditorSheet({
             <div className="editor-grid editor-grid-two">
               <div className="editor-field">
                 <span className="editor-label">客户</span>
-                <div className="editor-readonly">{customer?.name || '—'}</div>
+                <button
+                  type="button"
+                  className="editor-readonly editor-pickable"
+                  onClick={onOpenCustomerPicker}
+                  disabled={busy}
+                  aria-label="修改关联客户"
+                >
+                  <span className="editor-pickable-value">{customer?.name || '— 选择客户'}</span>
+                  <span className="editor-pickable-glyph" aria-hidden="true">›</span>
+                </button>
               </div>
               <div className="editor-field">
                 <span className="editor-label">关联任务</span>
@@ -2863,6 +3019,85 @@ function FactEditorSheet({
           <button type="button" className="action-button action-danger" onClick={onDelete} disabled={busy}>
             删除
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FactCustomerPickerSheet({
+  customers,
+  currentCustomerId,
+  busy,
+  onClose,
+  onSelect,
+}: {
+  customers: Customer[];
+  currentCustomerId: number | null;
+  busy: boolean;
+  onClose: () => void;
+  onSelect: (customerId: number | null) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const visible = customers.filter((c) => !c.status || c.status === 'active' || c.id === currentCustomerId);
+    if (!q) return visible;
+    return visible.filter((c) => {
+      if (c.name.toLowerCase().includes(q)) return true;
+      if (c.area && c.area.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [customers, currentCustomerId, query]);
+
+  return (
+    <div className="overlay">
+      <div className="sheet filter-sheet customer-picker-sheet">
+        <div className="sheet-header">
+          <button type="button" className="ghost-button" onClick={onClose}>
+            关闭
+          </button>
+          <strong>选择客户</strong>
+          <span className="muted-text">{filtered.length} 项</span>
+        </div>
+        <div className="customer-picker-search">
+          <span className="board-search-icon" aria-hidden="true">⌕</span>
+          <input
+            className="board-search-input"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="搜索客户名称 / 区域"
+            autoFocus
+          />
+          {query ? (
+            <button type="button" className="board-search-clear" onClick={() => setQuery('')} aria-label="清空搜索">×</button>
+          ) : null}
+        </div>
+        <div className="customer-picker-list">
+          <button
+            type="button"
+            className={currentCustomerId == null ? 'customer-picker-row customer-picker-row-active' : 'customer-picker-row'}
+            onClick={() => onSelect(null)}
+            disabled={busy}
+          >
+            <strong>未关联</strong>
+            <span className="muted-text">清空当前客户</span>
+          </button>
+          {filtered.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className={c.id === currentCustomerId ? 'customer-picker-row customer-picker-row-active' : 'customer-picker-row'}
+              onClick={() => onSelect(c.id)}
+              disabled={busy}
+            >
+              <strong>{c.name}</strong>
+              {c.area && <span className="muted-text">{c.area}</span>}
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="helper-text customer-picker-empty">没有匹配的客户</div>
+          )}
         </div>
       </div>
     </div>

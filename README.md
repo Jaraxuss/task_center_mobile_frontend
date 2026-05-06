@@ -36,8 +36,9 @@
 - 默认单列分组列表
 - 支持：
   - 按状态分组
-  - 按项目分组
+  - 按客户分组（视觉文案；当前实现按 `Task.project` 自由字符串聚合，未来切真 `customer_id` 是单独排期）
 - 这版**不做多列横向拖拽看板**
+- 项目组上 / 下 / 置顶 / 全部展开 四个图标统一为 Lucide 风格 SVG，分段控件与「知识」Tab 对齐为 pill-row 样式
 
 ### 4) 历史
 - 默认最近更新列表
@@ -52,11 +53,20 @@
   - 时间
   - 项目
   - 描述
+- 关联区：
+  - 客户材料：一行行 compact row，点击进材料编辑 sheet
+  - 客户事实：一行行 compact row（标题 + 状态 pill + 客户 + fact_date），点击进事实编辑 sheet；事实 sheet 关闭后回到任务详情，不丢上下文
 - 当前动作区：
   - 完成
   - 改时间
   - 延期
   - 取消
+
+### 6) 知识 Tab（「事实 / 材料」segmented）
+- 事实子 Tab：客户事实库，每条 fact 可改 raw_markdown / title / fact_date / value_types / **客户**（搜索式选择器）/ 状态 / 删除（**真物理删除**）
+- 材料子 Tab：周期材料按 review_batch 分组，详情 sheet 内可编辑 raw_facts_markdown 并切状态
+- 卡片行内**不放任何操作按钮**，所有动作收进详情 sheet
+- 不做"新增材料"或"新增事实"入口（全部由 agent 写入）
 
 ## 启动
 
