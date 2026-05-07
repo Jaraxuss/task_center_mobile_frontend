@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData, usePersistentState } from './hooks';
-import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
+import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, KnowledgeFactCustomerOverview, KnowledgeFactProjectOverview, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
 import { APP_TIME_ZONE, TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
 type TabKey = 'today' | 'plan' | 'board' | 'knowledge' | 'history';
@@ -469,6 +469,43 @@ function getHistoryDateGroups(tasks: Task[]) {
     }));
 }
 
+function sortKnowledgeCustomersWithPreference(
+  customers: KnowledgeFactCustomerOverview[],
+  pinnedIds: number[],
+  orderIds: number[],
+): KnowledgeFactCustomerOverview[] {
+  const pinnedMap = new Map(pinnedIds.map((id, idx) => [id, idx]));
+  const orderMap = new Map(orderIds.map((id, idx) => [id, idx]));
+
+  return [...customers].sort((a, b) => {
+    const aId = a.customer_id ?? -1;
+    const bId = b.customer_id ?? -1;
+
+    const aPinned = aId !== -1 && pinnedMap.has(aId);
+    const bPinned = bId !== -1 && pinnedMap.has(bId);
+    if (aPinned || bPinned) {
+      if (aPinned && bPinned) {
+        return (pinnedMap.get(aId) ?? 0) - (pinnedMap.get(bId) ?? 0);
+      }
+      return aPinned ? -1 : 1;
+    }
+
+    const aOrdered = aId !== -1 && orderMap.has(aId);
+    const bOrdered = bId !== -1 && orderMap.has(bId);
+    if (aOrdered || bOrdered) {
+      if (aOrdered && bOrdered) {
+        return (orderMap.get(aId) ?? 0) - (orderMap.get(bId) ?? 0);
+      }
+      return aOrdered ? -1 : 1;
+    }
+
+    const aLatest = a.latest_fact_at || '';
+    const bLatest = b.latest_fact_at || '';
+    if (aLatest !== bLatest) return bLatest.localeCompare(aLatest);
+    return a.customer_name.localeCompare(b.customer_name);
+  });
+}
+
 function makeOptimisticTask(task: Task, type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
   const now = localNowString();
   if (type === 'complete') {
@@ -524,9 +561,16 @@ function App() {
   const [factCustomerPickerOpen, setFactCustomerPickerOpen] = useState(false);
   const [materialFactsLoading, setMaterialFactsLoading] = useState(false);
   const [materialFactIds, setMaterialFactIds] = useState<number[]>([]);
+  const [materialLinkedFacts, setMaterialLinkedFacts] = useState<Fact[]>([]);
+  const [currentFact, setCurrentFact] = useState<Fact | null>(null);
   const [boardProjectQuery, setBoardProjectQuery] = useState('');
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<string[]>([]);
   const [expandedStatusKeys, setExpandedStatusKeys] = useState<string[]>(statusOrder);
+  const [knowledgeProjectFacts, setKnowledgeProjectFacts] = useState<Record<string, Fact[]>>({});
+  const [knowledgeProjectFactsLoading, setKnowledgeProjectFactsLoading] = useState<Record<string, boolean>>({});
+  const [knowledgeCustomerQuery, setKnowledgeCustomerQuery] = useState('');
+  const [expandedKnowledgeCustomerIds, setExpandedKnowledgeCustomerIds] = useState<number[]>([]);
+  const [expandedKnowledgeProjectKeys, setExpandedKnowledgeProjectKeys] = useState<string[]>([]);
   const projectLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const historyLoadMoreRef = useRef<HTMLDivElement | null>(null);
 
@@ -536,6 +580,12 @@ function App() {
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
+  const knowledgePreferences = useAsyncData(() => api.getKnowledgePreferences(), [], activeTab === 'knowledge');
+  const knowledgeFactOverview = useAsyncData(
+    () => api.getKnowledgeFactsOverview({ status: factStatusFilter }),
+    [factStatusFilter],
+    activeTab === 'knowledge',
+  );
   const customerMaterials = useAsyncData(
     () => api.getCustomerMaterials({ limit: 300 }),
     [],
@@ -545,11 +595,6 @@ function App() {
     () => api.getReviewBatches(),
     [],
     activeTab === 'knowledge' && knowledgeMode === 'materials',
-  );
-  const facts = useAsyncData(
-    () => api.getFacts({ limit: 300 }),
-    [],
-    activeTab === 'knowledge' && knowledgeMode === 'facts',
   );
   const customers = useAsyncData(
     () => api.getCustomers(),
@@ -598,15 +643,17 @@ function App() {
     () => groupMaterialsByBatch(materialItems, reviewBatches.data || []),
     [materialItems, reviewBatches.data],
   );
-  const rawFactItems = facts.data || [];
-  const factItems = useMemo(
-    () => (factStatusFilter ? rawFactItems.filter((fact) => fact.status === factStatusFilter) : rawFactItems),
-    [rawFactItems, factStatusFilter],
-  );
-  const factGroups = useMemo(
-    () => groupFactsByCustomer(factItems, customers.data || []),
-    [factItems, customers.data],
-  );
+  const overviewData: KnowledgeFactsOverview = knowledgeFactOverview.data || { total_fact_count: 0, customers: [] };
+  const knowledgePrefData: KnowledgePreferences = knowledgePreferences.data || { pinned_customer_ids: [], customer_order_ids: [] };
+
+  const filteredOverviewCustomers = useMemo(() => {
+    const query = knowledgeCustomerQuery.trim().toLowerCase();
+    let list = [...overviewData.customers];
+    if (query) {
+      list = list.filter((c) => c.customer_name.toLowerCase().includes(query));
+    }
+    return sortKnowledgeCustomersWithPreference(list, knowledgePrefData.pinned_customer_ids, knowledgePrefData.customer_order_ids);
+  }, [overviewData.customers, knowledgeCustomerQuery, knowledgePrefData]);
   const customerMap = useMemo(() => {
     const map = new Map<number, Customer>();
     (customers.data || []).forEach((c) => map.set(c.id, c));
@@ -750,7 +797,7 @@ function App() {
     if (activeTab === 'plan') jobs.push(plan.refresh());
     if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh());
     if (activeTab === 'knowledge' && knowledgeMode === 'materials') jobs.push(customerMaterials.refresh(), reviewBatches.refresh(), customers.refresh());
-    if (activeTab === 'knowledge' && knowledgeMode === 'facts') jobs.push(facts.refresh(), customers.refresh());
+    if (activeTab === 'knowledge' && knowledgeMode === 'facts') jobs.push(knowledgeFactOverview.refresh(), knowledgePreferences.refresh(), customers.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
   }
@@ -784,6 +831,66 @@ function App() {
     const nextPinned = current.includes(projectName) ? current.filter((name) => name !== projectName) : [projectName, ...current];
     await saveBoardPreferences({ pinned_projects: nextPinned });
     await projects.refresh();
+  }
+
+  async function saveKnowledgePreferences(next: Partial<KnowledgePreferences>) {
+    const merged: KnowledgePreferences = {
+      pinned_customer_ids: next.pinned_customer_ids ?? knowledgePrefData.pinned_customer_ids,
+      customer_order_ids: next.customer_order_ids ?? knowledgePrefData.customer_order_ids,
+    };
+    knowledgePreferences.setData(merged);
+    try {
+      const saved = await api.updateKnowledgePreferences(next);
+      knowledgePreferences.setData(saved);
+      return saved;
+    } catch (error) {
+      knowledgePreferences.setData(knowledgePrefData);
+      throw error;
+    }
+  }
+
+  async function handleTogglePinnedKnowledgeCustomer(customerId: number) {
+    const current = knowledgePrefData.pinned_customer_ids;
+    const nextPinned = current.includes(customerId) ? current.filter((id) => id !== customerId) : [customerId, ...current];
+    await saveKnowledgePreferences({ pinned_customer_ids: nextPinned });
+  }
+
+  async function handleMoveKnowledgeCustomer(customerId: number, direction: 'up' | 'down') {
+    const customers = filteredOverviewCustomers;
+    const visibleIds = customers.map((c) => c.customer_id).filter((id) => id != null) as number[];
+    const preferredVisible = knowledgePrefData.customer_order_ids.filter((id) => visibleIds.includes(id));
+    const remainingVisible = visibleIds.filter((id) => !preferredVisible.includes(id));
+    const orderedVisible = [...preferredVisible, ...remainingVisible];
+    const currentIndex = orderedVisible.indexOf(customerId);
+    const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+
+    if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedVisible.length) return;
+
+    const nextVisible = [...orderedVisible];
+    const [moving] = nextVisible.splice(currentIndex, 1);
+    nextVisible.splice(targetIndex, 0, moving);
+
+    const preservedHidden = knowledgePrefData.customer_order_ids.filter((id) => !visibleIds.includes(id));
+    await saveKnowledgePreferences({ customer_order_ids: [...nextVisible, ...preservedHidden] });
+  }
+
+  async function loadProjectFacts(customerId: number | null, projectId: number | null) {
+    const key = `${customerId ?? 'none'}:${projectId ?? 'unassigned'}`;
+    if (knowledgeProjectFacts[key]) return;
+    setKnowledgeProjectFactsLoading((prev) => ({ ...prev, [key]: true }));
+    try {
+      let result: Fact[] = [];
+      if (projectId == null) {
+        result = await api.getFacts({ customer_id: customerId ?? undefined, project_unassigned: true, status: factStatusFilter, limit: 100 });
+      } else {
+        result = await api.getFacts({ customer_id: customerId ?? undefined, project_id: projectId, status: factStatusFilter, limit: 100 });
+      }
+      setKnowledgeProjectFacts((prev) => ({ ...prev, [key]: result }));
+    } catch {
+      setKnowledgeProjectFacts((prev) => ({ ...prev, [key]: [] }));
+    } finally {
+      setKnowledgeProjectFactsLoading((prev) => ({ ...prev, [key]: false }));
+    }
   }
 
   async function runTaskAction(type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
@@ -929,9 +1036,17 @@ function App() {
     setMaterialFactsLoading(true);
     try {
       const mfs = await api.getMaterialFacts(materialId);
-      setMaterialFactIds(mfs.sort((a, b) => a.sort_order - b.sort_order).map((mf) => mf.fact_id));
+      const ids = mfs.sort((a, b) => a.sort_order - b.sort_order).map((mf) => mf.fact_id);
+      setMaterialFactIds(ids);
+      if (ids.length > 0) {
+        const facts = await Promise.all(ids.map((id) => api.getFact(id).catch(() => null)));
+        setMaterialLinkedFacts(facts.filter((f): f is Fact => f !== null));
+      } else {
+        setMaterialLinkedFacts([]);
+      }
     } catch {
       setMaterialFactIds([]);
+      setMaterialLinkedFacts([]);
     } finally {
       setMaterialFactsLoading(false);
     }
@@ -963,7 +1078,7 @@ function App() {
       setFactSheetOverTask(false);
       setToast({ text: '事实已保存', tone: 'success' });
       await Promise.all([
-        facts.refresh().catch(() => undefined),
+        knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
       ]);
     } catch (error) {
@@ -979,7 +1094,7 @@ function App() {
       await api.updateFact(factId, { status });
       setToast({ text: `事实已标为${factStatusLabelMap[status]}`, tone: 'success' });
       await Promise.all([
-        facts.refresh().catch(() => undefined),
+        knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
       ]);
     } catch (error) {
@@ -998,7 +1113,7 @@ function App() {
       setFactSheetOverTask(false);
       setToast({ text: '事实已删除', tone: 'success' });
       await Promise.all([
-        facts.refresh().catch(() => undefined),
+        knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
       ]);
     } catch (error) {
@@ -1018,7 +1133,7 @@ function App() {
       setFactDraft((prev) => (prev && prev.id === factId ? prev : prev));
       setToast({ text: '客户已更新', tone: 'success' });
       await Promise.all([
-        facts.refresh().catch(() => undefined),
+        knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
       ]);
       return updated;
@@ -1031,12 +1146,6 @@ function App() {
   }
 
   function openFactById(factId: number) {
-    const fact = (facts.data || []).find((f) => f.id === factId);
-    if (fact) {
-      setFactDraft(makeFactFormState(fact));
-      return;
-    }
-    // Fallback: fetch by id if not in cache
     void api.getFact(factId).then((loaded) => setFactDraft(makeFactFormState(loaded))).catch(() => {
       setToast({ text: '无法打开事实详情', tone: 'danger' });
     });
@@ -1214,7 +1323,8 @@ function App() {
               mode={knowledgeMode}
               onChangeMode={setKnowledgeMode}
               materialCount={rawMaterialItems.length}
-              factCount={rawFactItems.length}
+              factCount={overviewData.total_fact_count}
+              overviewLoading={knowledgeFactOverview.loading && !knowledgeFactOverview.loaded}
               statusFilter={knowledgeMode === 'materials' ? materialStatusFilter : ''}
               onMaterialStatusFilterChange={setMaterialStatusFilter}
               factStatusFilter={factStatusFilter}
@@ -1242,19 +1352,56 @@ function App() {
 
             {knowledgeMode === 'facts' && (
               <>
-                {facts.loading && !facts.loaded && <StateCard text="事实加载中…" />}
-                {facts.error && <StateCard text={facts.error} tone="danger" />}
-                {!facts.loading && !facts.error && facts.loaded && factItems.length === 0 && (
+                {knowledgeFactOverview.loading && !knowledgeFactOverview.loaded && <StateCard text="事实加载中…" />}
+                {knowledgeFactOverview.error && <StateCard text={knowledgeFactOverview.error} tone="danger" />}
+                {!knowledgeFactOverview.loading && !knowledgeFactOverview.error && knowledgeFactOverview.loaded && overviewData.customers.length === 0 && (
                   <StateCard text="当前没有客户事实。由主代理在转发 / 截图 / 会议纪要场景写入。" />
                 )}
-                {!facts.error && factGroups.map((group) => (
-                  <FactCustomerGroupSection
-                    key={group.key}
-                    title={group.title}
-                    facts={group.facts}
-                    onOpen={(fact) => setFactDraft(makeFactFormState(fact))}
-                  />
-                ))}
+
+                {!knowledgeFactOverview.error && knowledgeFactOverview.loaded && (
+                  <div className="knowledge-customer-search-shell board-search-shell">
+                    <span className="board-search-icon" aria-hidden="true">⌕</span>
+                    <input
+                      className="board-search-input"
+                      value={knowledgeCustomerQuery}
+                      onChange={(event) => setKnowledgeCustomerQuery(event.target.value)}
+                      placeholder="搜索客户"
+                    />
+                    {knowledgeCustomerQuery ? (
+                      <button type="button" className="board-search-clear" onClick={() => setKnowledgeCustomerQuery('')} aria-label="清空搜索">×</button>
+                    ) : null}
+                  </div>
+                )}
+                {!knowledgeFactOverview.error && filteredOverviewCustomers.length === 0 && knowledgeFactOverview.loaded && overviewData.customers.length > 0 && (
+                  <StateCard text="没有匹配的客户" />
+                )}
+                {!knowledgeFactOverview.error && filteredOverviewCustomers.map((cust) => {
+                  const cid = cust.customer_id;
+                  const pinned = cid != null && knowledgePrefData.pinned_customer_ids.includes(cid);
+                  const visibleIds = filteredOverviewCustomers.map((c) => c.customer_id).filter((id) => id != null) as number[];
+                  const canMoveUp = cid != null && visibleIds.indexOf(cid) > 0;
+                  const canMoveDown = cid != null && visibleIds.indexOf(cid) < visibleIds.length - 1;
+                  return (
+                    <KnowledgeFactCustomerCard
+                      key={cid ?? 'no-customer'}
+                      customerOverview={cust}
+                      pinned={pinned}
+                      canMoveUp={canMoveUp}
+                      canMoveDown={canMoveDown}
+                      expanded={expandedKnowledgeCustomerIds.includes(cid ?? -1)}
+                      expandedProjectKeys={expandedKnowledgeProjectKeys}
+                      projectFacts={knowledgeProjectFacts}
+                      projectFactsLoading={knowledgeProjectFactsLoading}
+                      onToggleCollapsed={() => setExpandedKnowledgeCustomerIds((prev) => prev.includes(cid ?? -1) ? prev.filter((id) => id !== (cid ?? -1)) : [...prev, (cid ?? -1)])}
+                      onTogglePinned={() => { if (cid != null) void handleTogglePinnedKnowledgeCustomer(cid); }}
+                      onMoveUp={() => { if (cid != null) void handleMoveKnowledgeCustomer(cid, 'up'); }}
+                      onMoveDown={() => { if (cid != null) void handleMoveKnowledgeCustomer(cid, 'down'); }}
+                      onToggleProject={(projectKey) => setExpandedKnowledgeProjectKeys((prev) => prev.includes(projectKey) ? prev.filter((k) => k !== projectKey) : [...prev, projectKey])}
+                      onLoadProjectFacts={(customerId, projectId) => { void loadProjectFacts(customerId, projectId); }}
+                      onOpenFact={(fact) => setFactDraft(makeFactFormState(fact))}
+                    />
+                  );
+                })}
               </>
             )}
           </section>
@@ -1424,9 +1571,7 @@ function App() {
           ? (reviewBatches.data || []).find((b) => b.id === material.review_batch_id) ?? null
           : null;
         const customer = material?.customer_id != null ? customerMap.get(material.customer_id) ?? null : null;
-        const linkedFacts = materialFactIds
-          .map((fid) => (facts.data || []).find((f) => f.id === fid) ?? null)
-          .filter((f): f is Fact => f !== null);
+        const linkedFacts = materialLinkedFacts;
         return (
           <MaterialEditorSheet
             draft={materialDraft}
@@ -1451,8 +1596,8 @@ function App() {
       })()}
 
       {factDraft && (factSheetOverTask || !selectedTask) && (() => {
-        const fact = (facts.data || []).find((f) => f.id === factDraft.id)
-          ?? (taskFacts.data || []).find((f) => f.id === factDraft.id)
+        const fact = currentFact
+          ?? (taskFacts.data || []).find((f: Fact) => f.id === factDraft.id)
           ?? null;
         const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
         return (
@@ -1487,8 +1632,8 @@ function App() {
       {factDraft && factCustomerPickerOpen && (
         <FactCustomerPickerSheet
           customers={customers.data || []}
-          currentCustomerId={(facts.data || []).find((f) => f.id === factDraft.id)?.customer_id
-            ?? (taskFacts.data || []).find((f) => f.id === factDraft.id)?.customer_id
+          currentCustomerId={currentFact?.customer_id
+            ?? (taskFacts.data || []).find((f: Fact) => f.id === factDraft.id)?.customer_id
             ?? null}
           busy={actionBusy === `fact-${factDraft.id}`}
           onClose={() => setFactCustomerPickerOpen(false)}
@@ -2072,6 +2217,7 @@ function KnowledgeHero({
   onChangeMode,
   materialCount,
   factCount,
+  overviewLoading,
   statusFilter,
   onMaterialStatusFilterChange,
   factStatusFilter,
@@ -2081,6 +2227,7 @@ function KnowledgeHero({
   onChangeMode: (mode: KnowledgeMode) => void;
   materialCount: number;
   factCount: number;
+  overviewLoading?: boolean;
   statusFilter: CustomerMaterialStatus | '';
   onMaterialStatusFilterChange: (status: CustomerMaterialStatus | '') => void;
   factStatusFilter: FactStatus | '';
@@ -2117,7 +2264,7 @@ function KnowledgeHero({
           className={mode === 'facts' ? 'knowledge-segment board-segment board-segment-active' : 'knowledge-segment board-segment'}
           onClick={() => onChangeMode('facts')}
         >
-          事实 <strong>{factCount}</strong>
+          事实 <strong>{overviewLoading ? '…' : factCount}</strong>
         </button>
       </div>
 
@@ -2224,6 +2371,140 @@ function MaterialRowWithCustomer({
         <p>{truncateText(preview, 160)}</p>
       </button>
     </article>
+  );
+}
+
+function KnowledgeFactCustomerCard({
+  customerOverview,
+  pinned,
+  canMoveUp,
+  canMoveDown,
+  expanded,
+  expandedProjectKeys,
+  projectFacts,
+  projectFactsLoading,
+  onToggleCollapsed,
+  onTogglePinned,
+  onMoveUp,
+  onMoveDown,
+  onToggleProject,
+  onLoadProjectFacts,
+  onOpenFact,
+}: {
+  customerOverview: KnowledgeFactCustomerOverview;
+  pinned: boolean;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  expanded: boolean;
+  expandedProjectKeys: string[];
+  projectFacts: Record<string, Fact[]>;
+  projectFactsLoading: Record<string, boolean>;
+  onToggleCollapsed: () => void;
+  onTogglePinned: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onToggleProject: (projectKey: string) => void;
+  onLoadProjectFacts: (customerId: number | null, projectId: number | null) => void;
+  onOpenFact: (fact: Fact) => void;
+}) {
+  const cid = customerOverview.customer_id;
+  const latestDate = customerOverview.latest_fact_at
+    ? formatDateTimeShort(customerOverview.latest_fact_at)
+    : '';
+  return (
+    <section className="card-section accent-board material-group-card">
+      <div className="section-heading board-group-heading">
+        <button type="button" className="section-heading-main collapsible-heading" onClick={onToggleCollapsed}>
+          <div className="section-heading-copy">
+            <strong>{customerOverview.customer_name}</strong>
+            <span>
+              {customerOverview.project_count} 个项目 · {customerOverview.fact_count} 条事实
+              {latestDate ? <> · {latestDate}</> : null}
+            </span>
+          </div>
+          <span className="collapse-indicator">{expanded ? '⌃' : '⌄'}</span>
+        </button>
+      </div>
+      <div className="project-group-actions-grid">
+        <button
+          type="button"
+          className="mini-icon-button project-group-action-button project-group-action-button-up"
+          disabled={!canMoveUp}
+          onClick={onMoveUp}
+          aria-label={`上移客户 ${customerOverview.customer_name}`}
+        >
+          <MoveArrowIcon direction="up" />
+        </button>
+        <button
+          type="button"
+          className={pinned
+            ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
+            : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
+          onClick={onTogglePinned}
+          aria-label={pinned ? `取消置顶客户 ${customerOverview.customer_name}` : `置顶客户 ${customerOverview.customer_name}`}
+        >
+          {pinned ? <PinIcon active /> : <PinIcon active={false} />}
+        </button>
+        <button
+          type="button"
+          className="mini-icon-button project-group-action-button project-group-action-button-down"
+          disabled={!canMoveDown}
+          onClick={onMoveDown}
+          aria-label={`下移客户 ${customerOverview.customer_name}`}
+        >
+          <MoveArrowIcon direction="down" />
+        </button>
+      </div>
+      {expanded && (
+        <div className="material-list">
+          {customerOverview.projects.map((proj) => {
+            const projKey = `${cid ?? 'none'}:${proj.project_id ?? 'unassigned'}`;
+            const factsList = projectFacts[projKey] || [];
+            const loading = projectFactsLoading[projKey] || false;
+            const projExpanded = expandedProjectKeys.includes(projKey);
+            const projLatest = proj.latest_fact_at
+              ? formatDateTimeShort(proj.latest_fact_at)
+              : '';
+            return (
+              <div key={projKey} className="knowledge-project-group">
+                <button
+                  type="button"
+                  className="knowledge-project-header"
+                  onClick={() => {
+                    onToggleProject(projKey);
+                    if (!projExpanded && factsList.length === 0) {
+                      onLoadProjectFacts(cid, proj.project_id);
+                    }
+                  }}
+                >
+                  <div className="knowledge-project-header-copy">
+                    <strong>{proj.project_name}</strong>
+                    <span>
+                      {proj.fact_count} 条事实
+                      {projLatest ? <> · {projLatest}</> : null}
+                    </span>
+                  </div>
+                  <span className="collapse-indicator">{projExpanded ? '⌃' : '⌄'}</span>
+                </button>
+                {projExpanded && (
+                  <div className="knowledge-project-facts">
+                    {loading ? (
+                      <StateCard text="加载事实中…" />
+                    ) : factsList.length === 0 ? (
+                      <div className="helper-text">这个项目暂无匹配状态的事实</div>
+                    ) : (
+                      factsList.map((fact) => (
+                        <FactRow key={fact.id} fact={fact} onOpen={() => onOpenFact(fact)} />
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }
 

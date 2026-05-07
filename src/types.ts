@@ -159,6 +159,7 @@ export interface Fact {
 export interface FactFilters {
   customer_id?: number;
   project_id?: number;
+  project_unassigned?: boolean;
   task_id?: number;
   status?: FactStatus | '';
   source_type?: string;
@@ -273,4 +274,32 @@ export interface DeferTaskPayload {
   deferred_to: string;
   due_at?: string;
   reason?: string;
+}
+
+export interface KnowledgeFactProjectOverview {
+  project_id: number | null;
+  project_name: string;
+  status?: string | null;
+  fact_count: number;
+  latest_fact_at?: string | null;
+}
+
+export interface KnowledgeFactCustomerOverview {
+  customer_id: number | null;
+  customer_name: string;
+  area?: string | null;
+  fact_count: number;
+  project_count: number;
+  latest_fact_at?: string | null;
+  projects: KnowledgeFactProjectOverview[];
+}
+
+export interface KnowledgeFactsOverview {
+  total_fact_count: number;
+  customers: KnowledgeFactCustomerOverview[];
+}
+
+export interface KnowledgePreferences {
+  pinned_customer_ids: number[];
+  customer_order_ids: number[];
 }

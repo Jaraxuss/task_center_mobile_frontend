@@ -1,5 +1,6 @@
 import { API_BASE_URL } from './config';
 import {
+  BoardPreferences,
   CompleteTaskPayload,
   Customer,
   CustomerMaterial,
@@ -14,7 +15,8 @@ import {
   FactFilters,
   FactStatus,
   HistoryResponse,
-  BoardPreferences,
+  KnowledgeFactsOverview,
+  KnowledgePreferences,
   ProjectSummary,
   ReviewBatch,
   Task,
@@ -121,7 +123,12 @@ function toFactSearchParams(filters?: FactFilters) {
   if (!filters) return '';
 
   Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
+    if (value === undefined || value === null || value === '') return;
+    if (typeof value === 'boolean') {
+      params.set(key, String(value));
+      return;
+    }
+    params.set(key, String(value));
   });
 
   const query = params.toString();
@@ -428,6 +435,19 @@ export const api = {
   deleteFact: async (id: number) => {
     await request<any>(`/api/facts/${id}`, { method: 'DELETE' });
   },
+  getKnowledgeFactsOverview: async (filters?: { status?: FactStatus | '' }) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.set('status', filters.status);
+    const qs = params.toString();
+    return request<KnowledgeFactsOverview>(`/api/knowledge/facts/overview${qs ? `?${qs}` : ''}`);
+  },
+  getKnowledgePreferences: async () =>
+    request<KnowledgePreferences>('/api/preferences/knowledge'),
+  updateKnowledgePreferences: async (payload: Partial<KnowledgePreferences>) =>
+    request<KnowledgePreferences>('/api/preferences/knowledge', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    }),
   createTask: async (payload: UpdateTaskPayload & { title: string }) =>
     normalizeTask(
       await request<any>(`/api/tasks`, {
