@@ -1075,6 +1075,7 @@ function App() {
     try {
       await api.updateFact(factDraft.id, payload);
       setFactDraft(null);
+      setCurrentFact(null);
       setFactSheetOverTask(false);
       setToast({ text: '事实已保存', tone: 'success' });
       await Promise.all([
@@ -1091,7 +1092,9 @@ function App() {
   async function updateFactStatusById(factId: number, status: FactStatus) {
     setActionBusy(`fact-${factId}`);
     try {
-      await api.updateFact(factId, { status });
+      const updated = await api.updateFact(factId, { status });
+      setCurrentFact(updated);
+      setFactDraft((prev) => (prev && prev.id === factId ? { ...prev, status } : prev));
       setToast({ text: `事实已标为${factStatusLabelMap[status]}`, tone: 'success' });
       await Promise.all([
         knowledgeFactOverview.refresh().catch(() => undefined),
@@ -1110,6 +1113,7 @@ function App() {
     try {
       await api.deleteFact(factId);
       setFactDraft(null);
+      setCurrentFact(null);
       setFactSheetOverTask(false);
       setToast({ text: '事实已删除', tone: 'success' });
       await Promise.all([
@@ -1130,6 +1134,7 @@ function App() {
         ? { clear_customer: true }
         : { customer_id: customerId };
       const updated = await api.updateFact(factId, payload);
+      setCurrentFact(updated);
       setFactDraft((prev) => (prev && prev.id === factId ? prev : prev));
       setToast({ text: '客户已更新', tone: 'success' });
       await Promise.all([
@@ -1146,7 +1151,10 @@ function App() {
   }
 
   function openFactById(factId: number) {
-    void api.getFact(factId).then((loaded) => setFactDraft(makeFactFormState(loaded))).catch(() => {
+    void api.getFact(factId).then((loaded) => {
+      setCurrentFact(loaded);
+      setFactDraft(makeFactFormState(loaded));
+    }).catch(() => {
       setToast({ text: '无法打开事实详情', tone: 'danger' });
     });
   }
@@ -1402,7 +1410,10 @@ function App() {
                       onMoveDown={() => { if (cid != null) void handleMoveKnowledgeCustomer(cid, 'down'); }}
                       onToggleProject={(projectKey) => setExpandedKnowledgeProjectKeys((prev) => prev.includes(projectKey) ? prev.filter((k) => k !== projectKey) : [...prev, projectKey])}
                       onLoadProjectFacts={(customerId, projectId) => { void loadProjectFacts(customerId, projectId); }}
-                      onOpenFact={(fact) => setFactDraft(makeFactFormState(fact))}
+                      onOpenFact={(fact: Fact) => {
+                        setCurrentFact(fact);
+                        setFactDraft(makeFactFormState(fact));
+                      }}
                     />
                   );
                 })}
@@ -1612,6 +1623,7 @@ function App() {
             onChange={(next) => setFactDraft(next)}
             onClose={() => {
               setFactDraft(null);
+              setCurrentFact(null);
               setFactSheetOverTask(false);
               setFactCustomerPickerOpen(false);
             }}
