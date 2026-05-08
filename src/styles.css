@@ -2715,3 +2715,48 @@ button {
   border-color: rgba(148, 163, 184, 0.18);
 }
 
+
+/* Knowledge Project UI Improvements */
+.knowledge-project-group {
+  margin-top: 6px;
+  background: var(--panel);
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.knowledge-project-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+}
+
+.knowledge-project-header-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.knowledge-project-header-copy strong {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.knowledge-project-header-copy span {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.knowledge-project-facts {
+  padding: 0 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

@@ -1161,6 +1161,10 @@ function App() {
   const summary = todayData?.summary;
   const projectNames = useMemo(() => (projects.data || []).map((item) => item.name).filter(Boolean), [projects.data]);
 
+  useEffect(() => {
+    setKnowledgeProjectFacts({});
+  }, [factStatusFilter]);
+
   return (
     <div className="app-shell">
       <main className="content">
@@ -2422,38 +2426,42 @@ function KnowledgeFactCustomerCard({
               {latestDate ? <> · {latestDate}</> : null}
             </span>
           </div>
-          <span className="collapse-indicator">{expanded ? '⌃' : '⌄'}</span>
         </button>
-      </div>
-      <div className="project-group-actions-grid">
-        <button
-          type="button"
-          className="mini-icon-button project-group-action-button project-group-action-button-up"
-          disabled={!canMoveUp}
-          onClick={onMoveUp}
-          aria-label={`上移客户 ${customerOverview.customer_name}`}
-        >
-          <MoveArrowIcon direction="up" />
-        </button>
-        <button
-          type="button"
-          className={pinned
-            ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
-            : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
-          onClick={onTogglePinned}
-          aria-label={pinned ? `取消置顶客户 ${customerOverview.customer_name}` : `置顶客户 ${customerOverview.customer_name}`}
-        >
-          {pinned ? <PinIcon active /> : <PinIcon active={false} />}
-        </button>
-        <button
-          type="button"
-          className="mini-icon-button project-group-action-button project-group-action-button-down"
-          disabled={!canMoveDown}
-          onClick={onMoveDown}
-          aria-label={`下移客户 ${customerOverview.customer_name}`}
-        >
-          <MoveArrowIcon direction="down" />
-        </button>
+        <div className="section-heading-side">
+          <span className="group-actions-inline">
+            <button
+              type="button"
+              className="mini-icon-button project-group-action-button project-group-action-button-up"
+              disabled={!canMoveUp}
+              onClick={onMoveUp}
+              aria-label={`上移客户 ${customerOverview.customer_name}`}
+            >
+              <MoveArrowIcon direction="up" />
+            </button>
+            <button
+              type="button"
+              className="mini-icon-button project-group-action-button project-group-action-button-down"
+              disabled={!canMoveDown}
+              onClick={onMoveDown}
+              aria-label={`下移客户 ${customerOverview.customer_name}`}
+            >
+              <MoveArrowIcon direction="down" />
+            </button>
+            <button
+              type="button"
+              className={pinned
+                ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
+                : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
+              onClick={onTogglePinned}
+              aria-label={pinned ? `取消置顶客户 ${customerOverview.customer_name}` : `置顶客户 ${customerOverview.customer_name}`}
+            >
+              {pinned ? <PinIcon active /> : <PinIcon active={false} />}
+            </button>
+          </span>
+          <button type="button" className="section-toggle-icon-button" onClick={onToggleCollapsed} aria-label={expanded ? `折叠 ${customerOverview.customer_name}` : `展开 ${customerOverview.customer_name}`}>
+            <span className="section-toggle-icon">{expanded ? '−' : '+'}</span>
+          </button>
+        </div>
       </div>
       {expanded && (
         <div className="material-list">
