@@ -400,23 +400,6 @@ export interface paths {
         patch: operations["update_project_v2_api_projects_v2__project_id__patch"];
         trace?: never;
     };
-    "/api/projects/rename": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Rename Project */
-        patch: operations["rename_project_api_projects_rename_patch"];
-        trace?: never;
-    };
     "/api/review-batches": {
         parameters: {
             query?: never;
@@ -659,8 +642,6 @@ export interface components {
             period_end?: string | null;
             /** Period Start */
             period_start?: string | null;
-            /** Project */
-            project?: string | null;
             /** Project V2 Id */
             project_v2_id?: number | null;
             /** Raw Facts Markdown */
@@ -668,31 +649,13 @@ export interface components {
             /** Review Batch Id */
             review_batch_id?: number | null;
             /**
-             * Source
-             * @default chat
-             */
-            source: string;
-            /** Source Refs */
-            source_refs?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Source Type
-             * @default text
-             */
-            source_type: string;
-            /**
              * Status
              * @default pending
              * @enum {string}
              */
             status: "pending" | "approved" | "skipped" | "uploaded";
-            /** Task Id */
-            task_id?: number | null;
             /** Title */
             title: string;
-            /** Value Types */
-            value_types?: string[];
         };
         /** CustomerMaterialFactCreate */
         CustomerMaterialFactCreate: {
@@ -745,26 +708,14 @@ export interface components {
             period_end?: string | null;
             /** Period Start */
             period_start?: string | null;
-            /** Project */
-            project: string | null;
             /** Project V2 Id */
             project_v2_id?: number | null;
             /** Raw Facts Markdown */
             raw_facts_markdown?: string | null;
             /** Review Batch Id */
             review_batch_id?: number | null;
-            /** Source */
-            source: string;
-            /** Source Refs */
-            source_refs: {
-                [key: string]: unknown;
-            };
-            /** Source Type */
-            source_type: string;
             /** Status */
             status: string;
-            /** Task Id */
-            task_id: number | null;
             /** Title */
             title: string;
             /**
@@ -772,8 +723,6 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Value Types */
-            value_types: string[];
         };
         /** CustomerMaterialUpdate */
         CustomerMaterialUpdate: {
@@ -787,11 +736,6 @@ export interface components {
              * @default false
              */
             clear_project_v2: boolean;
-            /**
-             * Clear Task
-             * @default false
-             */
-            clear_task: boolean;
             /** Customer Id */
             customer_id?: number | null;
             /** Generation Meta */
@@ -806,30 +750,16 @@ export interface components {
             period_end?: string | null;
             /** Period Start */
             period_start?: string | null;
-            /** Project */
-            project?: string | null;
             /** Project V2 Id */
             project_v2_id?: number | null;
             /** Raw Facts Markdown */
             raw_facts_markdown?: string | null;
             /** Review Batch Id */
             review_batch_id?: number | null;
-            /** Source */
-            source?: string | null;
-            /** Source Refs */
-            source_refs?: {
-                [key: string]: unknown;
-            } | null;
-            /** Source Type */
-            source_type?: string | null;
             /** Status */
             status?: ("pending" | "approved" | "skipped" | "uploaded") | null;
-            /** Task Id */
-            task_id?: number | null;
             /** Title */
             title?: string | null;
-            /** Value Types */
-            value_types?: string[] | null;
         };
         /** CustomerRead */
         CustomerRead: {
@@ -1106,23 +1036,6 @@ export interface components {
             plan_groups?: components["schemas"]["PlanGroup"][];
             /** Total */
             total: number;
-        };
-        /** ProjectRenameRequest */
-        ProjectRenameRequest: {
-            /** New Name */
-            new_name: string;
-            /** Old Name */
-            old_name: string;
-        };
-        /** ProjectRenameResponse */
-        ProjectRenameResponse: {
-            /** New Name */
-            new_name: string;
-            /** Old Name */
-            old_name: string;
-            project: components["schemas"]["ProjectSummary"];
-            /** Updated Task Count */
-            updated_task_count: number;
         };
         /** ProjectSummary */
         ProjectSummary: {
@@ -1719,11 +1632,8 @@ export interface operations {
     list_customer_materials_api_customer_materials_get: {
         parameters: {
             query?: {
-                project?: string | null;
                 q?: string | null;
                 status?: string | null;
-                value_type?: string | null;
-                task_id?: number | null;
                 include_archived?: boolean;
                 limit?: number;
                 customer_id?: number | null;
@@ -2744,39 +2654,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectV2Read"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rename_project_api_projects_rename_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProjectRenameRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectRenameResponse"];
                 };
             };
             /** @description Validation Error */

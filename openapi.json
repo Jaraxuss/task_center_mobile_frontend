@@ -238,18 +238,6 @@
             ],
             "title": "Period Start"
           },
-          "project": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project"
-          },
           "project_v2_id": {
             "anyOf": [
               {
@@ -283,23 +271,6 @@
             ],
             "title": "Review Batch Id"
           },
-          "source": {
-            "default": "chat",
-            "maxLength": 32,
-            "title": "Source",
-            "type": "string"
-          },
-          "source_refs": {
-            "additionalProperties": true,
-            "title": "Source Refs",
-            "type": "object"
-          },
-          "source_type": {
-            "default": "text",
-            "maxLength": 32,
-            "title": "Source Type",
-            "type": "string"
-          },
           "status": {
             "default": "pending",
             "enum": [
@@ -311,29 +282,11 @@
             "title": "Status",
             "type": "string"
           },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
-          },
           "title": {
             "maxLength": 255,
             "minLength": 1,
             "title": "Title",
             "type": "string"
-          },
-          "value_types": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Value Types",
-            "type": "array"
           }
         },
         "required": [
@@ -487,17 +440,6 @@
             ],
             "title": "Period Start"
           },
-          "project": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project"
-          },
           "project_v2_id": {
             "anyOf": [
               {
@@ -531,33 +473,9 @@
             ],
             "title": "Review Batch Id"
           },
-          "source": {
-            "title": "Source",
-            "type": "string"
-          },
-          "source_refs": {
-            "additionalProperties": true,
-            "title": "Source Refs",
-            "type": "object"
-          },
-          "source_type": {
-            "title": "Source Type",
-            "type": "string"
-          },
           "status": {
             "title": "Status",
             "type": "string"
-          },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
           },
           "title": {
             "title": "Title",
@@ -567,26 +485,13 @@
             "format": "date-time",
             "title": "Updated At",
             "type": "string"
-          },
-          "value_types": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Value Types",
-            "type": "array"
           }
         },
         "required": [
           "id",
-          "project",
           "title",
           "material_date",
-          "source_type",
-          "source",
-          "source_refs",
-          "value_types",
           "status",
-          "task_id",
           "created_at",
           "updated_at",
           "archived_at"
@@ -604,11 +509,6 @@
           "clear_project_v2": {
             "default": false,
             "title": "Clear Project V2",
-            "type": "boolean"
-          },
-          "clear_task": {
-            "default": false,
-            "title": "Clear Task",
             "type": "boolean"
           },
           "customer_id": {
@@ -687,18 +587,6 @@
             ],
             "title": "Period Start"
           },
-          "project": {
-            "anyOf": [
-              {
-                "maxLength": 128,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Project"
-          },
           "project_v2_id": {
             "anyOf": [
               {
@@ -732,42 +620,6 @@
             ],
             "title": "Review Batch Id"
           },
-          "source": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source"
-          },
-          "source_refs": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Refs"
-          },
-          "source_type": {
-            "anyOf": [
-              {
-                "maxLength": 32,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Type"
-          },
           "status": {
             "anyOf": [
               {
@@ -785,17 +637,6 @@
             ],
             "title": "Status"
           },
-          "task_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Task Id"
-          },
           "title": {
             "anyOf": [
               {
@@ -808,20 +649,6 @@
               }
             ],
             "title": "Title"
-          },
-          "value_types": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Value Types"
           }
         },
         "title": "CustomerMaterialUpdate",
@@ -3659,22 +3486,6 @@
         "parameters": [
           {
             "in": "query",
-            "name": "project",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Project"
-            }
-          },
-          {
-            "in": "query",
             "name": "q",
             "required": false,
             "schema": {
@@ -3703,38 +3514,6 @@
                 }
               ],
               "title": "Status"
-            }
-          },
-          {
-            "in": "query",
-            "name": "value_type",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Value Type"
-            }
-          },
-          {
-            "in": "query",
-            "name": "task_id",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Task Id"
             }
           },
           {
