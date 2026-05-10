@@ -30,14 +30,6 @@ import {
 } from './types';
 import { currentDateKey, getDateKey, toDateMillis } from './utils';
 
-const boardTitles: Record<TaskStatus, string> = {
-  todo: '待办',
-  doing: '进行中',
-  deferred: '已延期',
-  done: '已完成',
-  canceled: '已取消',
-};
-
 function normalizeTaskStatus(status: unknown): TaskStatus {
   switch (status) {
     case 'todo':
@@ -94,45 +86,23 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function toSearchParams(filters?: TaskFilters) {
-  const params = new URLSearchParams();
+const boardTitles: Record<TaskStatus, string> = {
+  todo: '待办',
+  doing: '进行中',
+  deferred: '已延期',
+  done: '已完成',
+  canceled: '已取消',
+};
+
+function toQueryString(filters?: object) {
   if (!filters) return '';
-
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value) params.set(key, value);
-  });
-
-  const query = params.toString();
-  return query ? `?${query}` : '';
-}
-
-function toMaterialSearchParams(filters?: CustomerMaterialFilters) {
   const params = new URLSearchParams();
-  if (!filters) return '';
-
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== '') params.set(key, String(value));
-  });
-
-  const query = params.toString();
-  return query ? `?${query}` : '';
-}
-
-function toFactSearchParams(filters?: FactFilters) {
-  const params = new URLSearchParams();
-  if (!filters) return '';
-
-  Object.entries(filters).forEach(([key, value]) => {
-    if (value === undefined || value === null || value === '') return;
-    if (typeof value === 'boolean') {
-      params.set(key, String(value));
-      return;
-    }
+  for (const [key, value] of Object.entries(filters)) {
+    if (value === undefined || value === null || value === '') continue;
     params.set(key, String(value));
-  });
-
-  const query = params.toString();
-  return query ? `?${query}` : '';
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : '';
 }
 
 function normalizeEvent(event: Partial<TaskEvent> & { payload?: Record<string, unknown> }): TaskEvent {
@@ -160,7 +130,7 @@ function normalizeRecurrence(raw: any): TaskRecurrence | null {
 
   const enabled = source.enabled !== false;
   const rawFrequency = String(source.frequency || source.freq || source.unit || 'weekly').toLowerCase();
-  const frequency = rawFrequency === 'day' ? 'daily' : rawFrequency === 'week' ? 'weekly' : rawFrequency === 'month' ? 'monthly' : rawFrequency;
+  const frequency = (rawFrequency === 'day' ? 'daily' : rawFrequency === 'week' ? 'weekly' : rawFrequency === 'month' ? 'monthly' : rawFrequency) as TaskRecurrence['frequency'];
   const interval = Math.max(1, Number(source.interval || source.every || 1) || 1);
   const daysOfWeek = toNumberArray(source.days_of_week ?? source.weekdays ?? source.week_days ?? source.byweekday);
   const dayOfMonthRaw = source.day_of_month ?? source.month_day ?? source.monthDay ?? source.bymonthday;
@@ -174,11 +144,9 @@ function normalizeRecurrence(raw: any): TaskRecurrence | null {
     days_of_week: daysOfWeek,
     day_of_month: Number.isFinite(dayOfMonth) ? dayOfMonth : null,
     end_at: source.end_at ?? source.until ?? source.ends_at ?? null,
-    timezone: source.timezone ?? source.tz ?? null,
+    timezone: source.timezone ?? source.tz ?? 'Asia/Shanghai',
     time_of_day: source.time_of_day ?? source.timeOfDay ?? source.time ?? null,
     start_at: source.start_at ?? source.anchor_at ?? source.starts_at ?? raw?.due_at ?? null,
-    next_run_at: source.next_run_at ?? source.next_due_at ?? null,
-    last_run_at: source.last_run_at ?? null,
     reminder_offsets_minutes: reminderOffsets,
   };
 }
@@ -194,8 +162,10 @@ function normalizeTask(task: any): Task {
     area: task.area ?? null,
     customer_id: task.customer_id == null ? null : Number(task.customer_id),
     project_id: task.project_id == null ? null : Number(task.project_id),
+    nightly_bucket: task.nightly_bucket ?? null,
+    nightly_reviewed_at: task.nightly_reviewed_at ?? null,
     tags: Array.isArray(task.tags) ? task.tags : [],
-    source: task.source,
+    source: task.source ?? 'web',
     source_type: task.source_type ?? null,
     created_at: task.created_at,
     updated_at: task.updated_at,
@@ -219,7 +189,6 @@ function normalizeCustomerMaterial(material: any): CustomerMaterial {
     created_at: material.created_at || new Date().toISOString(),
     updated_at: material.updated_at || new Date().toISOString(),
     archived_at: material.archived_at ?? null,
-    // v2 main fields
     raw_facts_markdown: material.raw_facts_markdown ?? null,
     customer_id: material.customer_id == null ? null : Number(material.customer_id),
     project_v2_id: material.project_v2_id == null ? null : Number(material.project_v2_id),
@@ -231,15 +200,14 @@ function normalizeCustomerMaterial(material: any): CustomerMaterial {
       material.generation_meta && typeof material.generation_meta === 'object' && !Array.isArray(material.generation_meta)
         ? material.generation_meta
         : null,
-    // legacy metadata fields
     project: material.project ?? null,
     material_date: material.material_date ?? null,
-    source_type: material.source_type ? String(material.source_type) : undefined,
-    source: material.source ? String(material.source) : undefined,
-    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : undefined,
+    source_type: String(material.source_type || ''),
+    source: String(material.source || ''),
+    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : {},
     value_types: Array.isArray(material.value_types)
       ? material.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-      : undefined,
+      : [],
     task_id: material.task_id == null ? null : Number(material.task_id),
   };
 }
@@ -253,7 +221,7 @@ function normalizeReviewBatch(batch: any): ReviewBatch {
     period_end: batch.period_end ?? null,
     status: String(batch.status || 'pending'),
     material_count: Number(batch.material_count || 0),
-    created_by: batch.created_by ?? null,
+    created_by: String(batch.created_by || ''),
     created_at: batch.created_at || new Date().toISOString(),
     updated_at: batch.updated_at || new Date().toISOString(),
   };
@@ -263,8 +231,14 @@ function normalizeCustomer(customer: any): Customer {
   return {
     id: Number(customer.id),
     name: String(customer.name || ''),
+    key: customer.key ?? null,
     area: customer.area ?? null,
-    status: customer.status ? String(customer.status) : undefined,
+    aliases: Array.isArray(customer.aliases) ? customer.aliases : [],
+    description: customer.description ?? null,
+    tags: Array.isArray(customer.tags) ? customer.tags : [],
+    status: String(customer.status || 'active'),
+    created_at: customer.created_at || new Date().toISOString(),
+    updated_at: customer.updated_at || new Date().toISOString(),
   };
 }
 
@@ -284,7 +258,7 @@ function normalizeFact(fact: any): Fact {
     id: Number(fact.id),
     title: String(fact.title || ''),
     raw_markdown: String(fact.raw_markdown || ''),
-    fact_date: fact.fact_date ?? null,
+    fact_date: fact.fact_date || new Date().toISOString(),
     status: normalizeFactStatus(fact.status),
     source_type: String(fact.source_type || ''),
     value_types: Array.isArray(fact.value_types)
@@ -321,6 +295,18 @@ function serializeRecurrencePayload(recurrence?: TaskRecurrence | null) {
     start_at: recurrence.start_at ?? null,
     end_at: recurrence.end_at ?? null,
     reminder_offsets_minutes: toNumberArray(recurrence.reminder_offsets_minutes),
+  };
+}
+
+function normalizeBoardPreferences(response: any): BoardPreferences {
+  return {
+    task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
+    pinned_projects: Array.isArray(response?.pinned_projects)
+      ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [],
+    project_order: Array.isArray(response?.project_order)
+      ? response.project_order.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [],
   };
 }
 
@@ -384,15 +370,15 @@ export const api = {
     } satisfies DashboardBoard;
   },
   getHistoryDashboard: async (filters?: TaskFilters) => {
-    const response = await request<any>(`/api/history${toSearchParams(filters)}`);
+    const response = await request<any>(`/api/history${toQueryString(filters)}`);
     return {
       items: Array.isArray(response.tasks) ? response.tasks.map(normalizeTask) : [],
       total: Number(response.total || 0),
     } satisfies HistoryResponse;
   },
   getTask: async (id: number) => normalizeTask(await request<any>(`/api/tasks/${id}`)),
-  getTasks: async (filters?: TaskFilters) => (await request<any[]>(`/api/tasks${toSearchParams(filters)}`)).map(normalizeTask),
-  getCustomerMaterials: async (filters?: CustomerMaterialFilters) => (await request<any[]>(`/api/customer-materials${toMaterialSearchParams(filters)}`)).map(normalizeCustomerMaterial),
+  getTasks: async (filters?: TaskFilters) => (await request<any[]>(`/api/tasks${toQueryString(filters)}`)).map(normalizeTask),
+  getCustomerMaterials: async (filters?: CustomerMaterialFilters) => (await request<any[]>(`/api/customer-materials${toQueryString(filters)}`)).map(normalizeCustomerMaterial),
   getTaskCustomerMaterials: async (taskId: number) => (await request<any[]>(`/api/tasks/${taskId}/customer-materials`)).map(normalizeCustomerMaterial),
   updateCustomerMaterial: async (id: number, payload: UpdateCustomerMaterialPayload) =>
     normalizeCustomerMaterial(
@@ -421,9 +407,9 @@ export const api = {
   getReviewBatchMaterials: async (id: number) =>
     (await request<any[]>(`/api/review-batches/${id}/customer-materials`)).map(normalizeCustomerMaterial),
   getCustomers: async () => (await request<any[]>(`/api/customers`)).map(normalizeCustomer),
-  getFacts: async (filters?: FactFilters) => (await request<any[]>(`/api/facts${toFactSearchParams(filters)}`)).map(normalizeFact),
+  getFacts: async (filters?: FactFilters) => (await request<any[]>(`/api/facts${toQueryString(filters)}`)).map(normalizeFact),
   getTaskFacts: async (taskId: number) =>
-    (await request<any[]>(`/api/facts${toFactSearchParams({ task_id: taskId, limit: 100 })}`)).map(normalizeFact),
+    (await request<any[]>(`/api/facts${toQueryString({ task_id: taskId, limit: 100 })}`)).map(normalizeFact),
   getFact: async (id: number) => normalizeFact(await request<any>(`/api/facts/${id}`)),
   updateFact: async (id: number, payload: UpdateFactPayload) =>
     normalizeFact(
@@ -477,33 +463,15 @@ export const api = {
         : []
     ) satisfies ProjectSummary[];
   },
-  getBoardPreferences: async () => {
-    const response = await request<any>('/api/preferences/board');
-    return {
-      task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
-      pinned_projects: Array.isArray(response?.pinned_projects)
-        ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-        : [],
-      project_order: Array.isArray(response?.project_order)
-        ? response.project_order.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-        : [],
-    } satisfies BoardPreferences;
-  },
-  updateBoardPreferences: async (payload: Partial<BoardPreferences>) => {
-    const response = await request<any>('/api/preferences/board', {
-      method: 'PATCH',
-      body: JSON.stringify(payload),
-    });
-    return {
-      task_order: Array.isArray(response?.task_order) ? response.task_order.map((item: unknown) => Number(item)).filter((item: number) => Number.isFinite(item) && item > 0) : [],
-      pinned_projects: Array.isArray(response?.pinned_projects)
-        ? response.pinned_projects.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-        : [],
-      project_order: Array.isArray(response?.project_order)
-        ? response.project_order.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-        : [],
-    } satisfies BoardPreferences;
-  },
+  getBoardPreferences: async () =>
+    normalizeBoardPreferences(await request<any>('/api/preferences/board')),
+  updateBoardPreferences: async (payload: Partial<BoardPreferences>) =>
+    normalizeBoardPreferences(
+      await request<any>('/api/preferences/board', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }),
+    ),
   updateTask: async (id: number, payload: UpdateTaskPayload) =>
     normalizeTask(
       await request<any>(`/api/tasks/${id}`, {

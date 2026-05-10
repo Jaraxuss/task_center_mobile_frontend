@@ -25,20 +25,38 @@ export type FactStatus = 'draft' | 'confirmed' | 'rejected';
 
 // --- Read models (backend → frontend) -------------------------------------
 export type Reminder = Schemas['ReminderRead'];
-export type TaskRecurrence = Schemas['TaskRecurrenceRead'];
+export type TaskRecurrenceRead = Schemas['TaskRecurrenceRead'];
+export type TaskRecurrence = Schemas['TaskRecurrenceWrite'] & {
+  id?: number;
+  task_id?: number;
+  next_run_at?: string | null;
+  last_run_at?: string | null;
+  created_at?: string;
+  updated_at?: string;
+};
 export type TaskEvent = Schemas['TaskEventRead'];
-export type Task = Schemas['TaskDetail'];
-export type CustomerMaterial = Schemas['CustomerMaterialRead'];
+export type Task = Omit<Schemas['TaskDetail'], 'status' | 'recurrence'> & {
+  status: TaskStatus;
+  recurrence?: TaskRecurrence | null;
+};
+export type CustomerMaterial = Omit<Schemas['CustomerMaterialRead'], 'status'> & { status: CustomerMaterialStatus };
 export type CustomerMaterialFact = Schemas['CustomerMaterialFactRead'];
 export type ReviewBatch = Schemas['ReviewBatchRead'];
 export type Customer = Schemas['CustomerRead'];
-export type Fact = Schemas['FactRead'];
+export type Fact = Omit<Schemas['FactRead'], 'status'> & { status: FactStatus };
 export type ProjectSummary = Schemas['ProjectSummary'];
 export type KnowledgeFactProjectOverview = Schemas['KnowledgeFactProjectOverview'];
 export type KnowledgeFactCustomerOverview = Schemas['KnowledgeFactCustomerOverview'];
 export type KnowledgeFactsOverview = Schemas['KnowledgeFactsOverview'];
-export type KnowledgePreferences = Schemas['KnowledgePreferenceRead'];
-export type BoardPreferences = Schemas['BoardPreferenceRead'];
+export type KnowledgePreferences = {
+  pinned_customer_ids: number[];
+  customer_order_ids: number[];
+};
+export type BoardPreferences = {
+  task_order: number[];
+  pinned_projects: string[];
+  project_order: string[];
+};
 
 // --- Frontend-only composite types ----------------------------------------
 
