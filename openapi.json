@@ -5841,6 +5841,7 @@
     },
     "/api/tasks/{task_id}/customer-materials": {
       "get": {
+        "description": "List materials linked to a task.\n\nUses raw SQL for the legacy task_id column (removed from ORM, still in DB\nuntil the alembic migration drops it).  This endpoint will be removed once\nthe column is dropped.",
         "operationId": "list_task_customer_materials_api_tasks__task_id__customer_materials_get",
         "parameters": [
           {
