@@ -1539,35 +1539,7 @@
         "title": "PlanSummary",
         "type": "object"
       },
-      "ProjectSummary": {
-        "properties": {
-          "done_task_count": {
-            "title": "Done Task Count",
-            "type": "integer"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "open_task_count": {
-            "title": "Open Task Count",
-            "type": "integer"
-          },
-          "task_count": {
-            "title": "Task Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "name",
-          "task_count",
-          "open_task_count",
-          "done_task_count"
-        ],
-        "title": "ProjectSummary",
-        "type": "object"
-      },
-      "ProjectV2Create": {
+      "ProjectCreate": {
         "properties": {
           "actual_end_at": {
             "anyOf": [
@@ -1666,10 +1638,10 @@
         "required": [
           "name"
         ],
-        "title": "ProjectV2Create",
+        "title": "ProjectCreate",
         "type": "object"
       },
-      "ProjectV2Read": {
+      "ProjectRead": {
         "properties": {
           "actual_end_at": {
             "anyOf": [
@@ -1777,10 +1749,38 @@
           "created_at",
           "updated_at"
         ],
-        "title": "ProjectV2Read",
+        "title": "ProjectRead",
         "type": "object"
       },
-      "ProjectV2Update": {
+      "ProjectSummary": {
+        "properties": {
+          "done_task_count": {
+            "title": "Done Task Count",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "open_task_count": {
+            "title": "Open Task Count",
+            "type": "integer"
+          },
+          "task_count": {
+            "title": "Task Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "task_count",
+          "open_task_count",
+          "done_task_count"
+        ],
+        "title": "ProjectSummary",
+        "type": "object"
+      },
+      "ProjectUpdate": {
         "properties": {
           "actual_end_at": {
             "anyOf": [
@@ -1907,7 +1907,7 @@
             "title": "Target End At"
           }
         },
-        "title": "ProjectV2Update",
+        "title": "ProjectUpdate",
         "type": "object"
       },
       "ReminderCreate": {
@@ -4925,31 +4925,6 @@
     "/api/projects": {
       "get": {
         "operationId": "list_projects_api_projects_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/ProjectSummary"
-                  },
-                  "title": "Response List Projects Api Projects Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "List Projects",
-        "tags": [
-          "projects"
-        ]
-      }
-    },
-    "/api/projects-v2": {
-      "get": {
-        "operationId": "list_projects_v2_api_projects_v2_get",
         "parameters": [
           {
             "in": "query",
@@ -5022,9 +4997,9 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ProjectV2Read"
+                    "$ref": "#/components/schemas/ProjectRead"
                   },
-                  "title": "Response List Projects V2 Api Projects V2 Get",
+                  "title": "Response List Projects Api Projects Get",
                   "type": "array"
                 }
               }
@@ -5042,18 +5017,18 @@
             "description": "Validation Error"
           }
         },
-        "summary": "List Projects V2",
+        "summary": "List Projects",
         "tags": [
-          "projects-v2"
+          "projects"
         ]
       },
       "post": {
-        "operationId": "create_project_v2_api_projects_v2_post",
+        "operationId": "create_project_api_projects_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectV2Create"
+                "$ref": "#/components/schemas/ProjectCreate"
               }
             }
           },
@@ -5064,7 +5039,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectV2Read"
+                  "$ref": "#/components/schemas/ProjectRead"
                 }
               }
             },
@@ -5081,7 +5056,147 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Create Project V2",
+        "summary": "Create Project",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects-v2": {
+      "get": {
+        "operationId": "list_projects_v2_compat_api_projects_v2_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "customer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Customer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "area",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Area"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "q",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectRead"
+                  },
+                  "title": "Response List Projects V2 Compat Api Projects V2 Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Projects V2 Compat",
+        "tags": [
+          "projects-v2"
+        ]
+      },
+      "post": {
+        "operationId": "create_project_v2_compat_api_projects_v2_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Project V2 Compat",
         "tags": [
           "projects-v2"
         ]
@@ -5089,7 +5204,7 @@
     },
     "/api/projects-v2/{project_id}": {
       "get": {
-        "operationId": "get_project_v2_api_projects_v2__project_id__get",
+        "operationId": "get_project_v2_compat_api_projects_v2__project_id__get",
         "parameters": [
           {
             "in": "path",
@@ -5106,7 +5221,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectV2Read"
+                  "$ref": "#/components/schemas/ProjectRead"
                 }
               }
             },
@@ -5123,13 +5238,13 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Get Project V2",
+        "summary": "Get Project V2 Compat",
         "tags": [
           "projects-v2"
         ]
       },
       "patch": {
-        "operationId": "update_project_v2_api_projects_v2__project_id__patch",
+        "operationId": "update_project_v2_compat_api_projects_v2__project_id__patch",
         "parameters": [
           {
             "in": "path",
@@ -5145,7 +5260,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ProjectV2Update"
+                "$ref": "#/components/schemas/ProjectUpdate"
               }
             }
           },
@@ -5156,7 +5271,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectV2Read"
+                  "$ref": "#/components/schemas/ProjectRead"
                 }
               }
             },
@@ -5173,9 +5288,127 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Update Project V2",
+        "summary": "Update Project V2 Compat",
         "tags": [
           "projects-v2"
+        ]
+      }
+    },
+    "/api/projects/summary": {
+      "get": {
+        "description": "Lightweight project summaries with task counts (used by board hero).",
+        "operationId": "list_project_summaries_api_projects_summary_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ProjectSummary"
+                  },
+                  "title": "Response List Project Summaries Api Projects Summary Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Project Summaries",
+        "tags": [
+          "projects"
+        ]
+      }
+    },
+    "/api/projects/{project_id}": {
+      "get": {
+        "operationId": "get_project_api_projects__project_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Project",
+        "tags": [
+          "projects"
+        ]
+      },
+      "patch": {
+        "operationId": "update_project_api_projects__project_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_id",
+            "required": true,
+            "schema": {
+              "title": "Project Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Project",
+        "tags": [
+          "projects"
         ]
       }
     },

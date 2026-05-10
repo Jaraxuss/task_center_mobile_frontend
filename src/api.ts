@@ -18,7 +18,7 @@ import {
   KnowledgeFactsOverview,
   KnowledgePreferences,
   ProjectSummary,
-  ProjectV2,
+  Project,
   ReviewBatch,
   Task,
   TaskEvent,
@@ -444,8 +444,8 @@ export const api = {
         }),
       }),
     ),
-  getProjects: async () => {
-    const response = await request<any[]>('/api/projects');
+  getProjectSummaries: async () => {
+    const response = await request<any[]>('/api/projects/summary');
     return (
       Array.isArray(response)
         ? response.map((project) => ({
@@ -457,8 +457,8 @@ export const api = {
         : []
     ) satisfies ProjectSummary[];
   },
-  getProjectsV2: async () => {
-    const response = await request<any[]>('/api/projects-v2');
+  getProjects: async () => {
+    const response = await request<any[]>('/api/projects');
     return (
       Array.isArray(response)
         ? response.map((p) => ({
@@ -476,7 +476,7 @@ export const api = {
             updated_at: p.updated_at || new Date().toISOString(),
           }))
         : []
-    ) satisfies ProjectV2[];
+    ) satisfies Project[];
   },
   getBoardPreferences: async () =>
     normalizeBoardPreferences(await request<any>('/api/preferences/board')),

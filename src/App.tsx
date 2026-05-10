@@ -115,8 +115,8 @@ function App() {
   const plan = useAsyncData(() => api.getPlanDashboard(), [], activeTab === 'plan');
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
-  const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
-  const projectsV2 = useAsyncData(() => api.getProjectsV2(), [], editorMode !== null || materialDraft !== null);
+  const projectSummaries = useAsyncData(() => api.getProjectSummaries(), [], activeTab === 'board');
+  const projects = useAsyncData(() => api.getProjects(), [], editorMode !== null || materialDraft !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const knowledgePreferences = useAsyncData(() => api.getKnowledgePreferences(), [], activeTab === 'knowledge');
   const knowledgeFactOverview = useAsyncData(
@@ -296,7 +296,7 @@ function App() {
           <section className="page">
             <BoardHero
               mode={boardMode}
-              projects={projects.data || []}
+              projects={projectSummaries.data || []}
               projectQuery={boardProjectQuery}
               allGroupsExpanded={boardMode === 'project'
                 ? filteredProjectGroups.length > 0 && filteredProjectGroups.every((group: { key: string }) => expandedProjectKeys.includes(group.key))
@@ -589,7 +589,7 @@ function App() {
           onClose={() => setEditorMode(null)}
           onSubmit={() => void submitEditor()}
           busy={actionBusy === 'create' || actionBusy === 'edit'}
-          projectsV2={projectsV2.data || []}
+          projects={projects.data || []}
           customers={customers.data || []}
         />
       )}
@@ -601,7 +601,7 @@ function App() {
           : null;
         const customer = material?.customer_id != null ? customerMap.get(material.customer_id) ?? null : null;
         const projMatch = material?.project_v2_id != null
-          ? (projectsV2.data || []).find((p) => p.id === material.project_v2_id)
+          ? (projects.data || []).find((p) => p.id === material.project_v2_id)
           : null;
         const linkedFacts = materialLinkedFacts;
         return (

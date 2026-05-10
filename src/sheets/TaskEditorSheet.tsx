@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { buildRecurrencePayload, toIsoOrNull } from '../lib';
 import type { TaskFormState } from '../lib';
-import { Customer, ProjectV2, TaskStatus } from '../types';
+import { Customer, Project, TaskStatus } from '../types';
 import { describeRecurrence, normalizeWeekdays, statusLabelMap } from '../utils';
 
 export type TaskFormMode = 'create' | 'edit';
@@ -29,7 +29,7 @@ export function TaskEditorSheet({
   onClose,
   onSubmit,
   busy,
-  projectsV2,
+  projects,
   customers,
 }: {
   mode: TaskFormMode;
@@ -38,7 +38,7 @@ export function TaskEditorSheet({
   onClose: () => void;
   onSubmit: () => void;
   busy: boolean;
-  projectsV2: ProjectV2[];
+  projects: Project[];
   customers: Customer[];
 }) {
   const customerMap = useMemo(() => {
@@ -48,9 +48,9 @@ export function TaskEditorSheet({
   }, [customers]);
 
   const groupedProjects = useMemo(() => {
-    const activeProjects = projectsV2.filter((p) => p.status === 'active');
-    const withCustomer: Array<{ project: ProjectV2; customerName: string }> = [];
-    const withoutCustomer: ProjectV2[] = [];
+    const activeProjects = projects.filter((p) => p.status === 'active');
+    const withCustomer: Array<{ project: Project; customerName: string }> = [];
+    const withoutCustomer: Project[] = [];
     for (const p of activeProjects) {
       if (p.customer_id != null) {
         const name = customerMap.get(p.customer_id);
@@ -60,14 +60,14 @@ export function TaskEditorSheet({
         withoutCustomer.push(p);
       }
     }
-    const byCustomer = new Map<string, ProjectV2[]>();
+    const byCustomer = new Map<string, Project[]>();
     withCustomer.forEach(({ project, customerName }) => {
       const list = byCustomer.get(customerName) || [];
       list.push(project);
       byCustomer.set(customerName, list);
     });
     return { byCustomer: [...byCustomer.entries()].sort((a, b) => a[0].localeCompare(b[0])), other: withoutCustomer };
-  }, [projectsV2, customerMap]);
+  }, [projects, customerMap]);
   const recurrenceSummary = draft.recurrence_enabled
     ? describeRecurrence(buildRecurrencePayload(draft, toIsoOrNull(draft.due_at)))
     : '单次提醒';

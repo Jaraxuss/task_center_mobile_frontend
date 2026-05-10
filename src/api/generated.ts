@@ -357,7 +357,8 @@ export interface paths {
         /** List Projects */
         get: operations["list_projects_api_projects_get"];
         put?: never;
-        post?: never;
+        /** Create Project */
+        post: operations["create_project_api_projects_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -371,11 +372,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Projects V2 */
-        get: operations["list_projects_v2_api_projects_v2_get"];
+        /** List Projects V2 Compat */
+        get: operations["list_projects_v2_compat_api_projects_v2_get"];
         put?: never;
-        /** Create Project V2 */
-        post: operations["create_project_v2_api_projects_v2_post"];
+        /** Create Project V2 Compat */
+        post: operations["create_project_v2_compat_api_projects_v2_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -389,15 +390,53 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Project V2 */
-        get: operations["get_project_v2_api_projects_v2__project_id__get"];
+        /** Get Project V2 Compat */
+        get: operations["get_project_v2_compat_api_projects_v2__project_id__get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
-        /** Update Project V2 */
-        patch: operations["update_project_v2_api_projects_v2__project_id__patch"];
+        /** Update Project V2 Compat */
+        patch: operations["update_project_v2_compat_api_projects_v2__project_id__patch"];
+        trace?: never;
+    };
+    "/api/projects/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Project Summaries
+         * @description Lightweight project summaries with task counts (used by board hero).
+         */
+        get: operations["list_project_summaries_api_projects_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{project_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Project */
+        get: operations["get_project_api_projects__project_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Project */
+        patch: operations["update_project_api_projects__project_id__patch"];
         trace?: never;
     };
     "/api/review-batches": {
@@ -530,7 +569,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Task Customer Materials */
+        /**
+         * List Task Customer Materials
+         * @description List materials linked to a task.
+         *
+         *     Uses raw SQL for the legacy task_id column (removed from ORM, still in DB
+         *     until the alembic migration drops it).  This endpoint will be removed once
+         *     the column is dropped.
+         */
         get: operations["list_task_customer_materials_api_tasks__task_id__customer_materials_get"];
         put?: never;
         post?: never;
@@ -1037,19 +1083,8 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** ProjectSummary */
-        ProjectSummary: {
-            /** Done Task Count */
-            done_task_count: number;
-            /** Name */
-            name: string;
-            /** Open Task Count */
-            open_task_count: number;
-            /** Task Count */
-            task_count: number;
-        };
-        /** ProjectV2Create */
-        ProjectV2Create: {
+        /** ProjectCreate */
+        ProjectCreate: {
             /** Actual End At */
             actual_end_at?: string | null;
             /** Area */
@@ -1077,8 +1112,8 @@ export interface components {
             /** Target End At */
             target_end_at?: string | null;
         };
-        /** ProjectV2Read */
-        ProjectV2Read: {
+        /** ProjectRead */
+        ProjectRead: {
             /** Actual End At */
             actual_end_at: string | null;
             /** Area */
@@ -1110,8 +1145,19 @@ export interface components {
              */
             updated_at: string;
         };
-        /** ProjectV2Update */
-        ProjectV2Update: {
+        /** ProjectSummary */
+        ProjectSummary: {
+            /** Done Task Count */
+            done_task_count: number;
+            /** Name */
+            name: string;
+            /** Open Task Count */
+            open_task_count: number;
+            /** Task Count */
+            task_count: number;
+        };
+        /** ProjectUpdate */
+        ProjectUpdate: {
             /** Actual End At */
             actual_end_at?: string | null;
             /** Area */
@@ -2516,7 +2562,12 @@ export interface operations {
     };
     list_projects_api_projects_get: {
         parameters: {
-            query?: never;
+            query?: {
+                customer_id?: number | null;
+                area?: string | null;
+                status?: string | null;
+                q?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -2529,12 +2580,54 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectSummary"][];
+                    "application/json": components["schemas"]["ProjectRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
     };
-    list_projects_v2_api_projects_v2_get: {
+    create_project_api_projects_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_projects_v2_compat_api_projects_v2_get: {
         parameters: {
             query?: {
                 customer_id?: number | null;
@@ -2554,7 +2647,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectV2Read"][];
+                    "application/json": components["schemas"]["ProjectRead"][];
                 };
             };
             /** @description Validation Error */
@@ -2568,7 +2661,7 @@ export interface operations {
             };
         };
     };
-    create_project_v2_api_projects_v2_post: {
+    create_project_v2_compat_api_projects_v2_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -2577,7 +2670,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProjectV2Create"];
+                "application/json": components["schemas"]["ProjectCreate"];
             };
         };
         responses: {
@@ -2587,7 +2680,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectV2Read"];
+                    "application/json": components["schemas"]["ProjectRead"];
                 };
             };
             /** @description Validation Error */
@@ -2601,7 +2694,7 @@ export interface operations {
             };
         };
     };
-    get_project_v2_api_projects_v2__project_id__get: {
+    get_project_v2_compat_api_projects_v2__project_id__get: {
         parameters: {
             query?: never;
             header?: never;
@@ -2618,7 +2711,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectV2Read"];
+                    "application/json": components["schemas"]["ProjectRead"];
                 };
             };
             /** @description Validation Error */
@@ -2632,7 +2725,7 @@ export interface operations {
             };
         };
     };
-    update_project_v2_api_projects_v2__project_id__patch: {
+    update_project_v2_compat_api_projects_v2__project_id__patch: {
         parameters: {
             query?: never;
             header?: never;
@@ -2643,7 +2736,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ProjectV2Update"];
+                "application/json": components["schemas"]["ProjectUpdate"];
             };
         };
         responses: {
@@ -2653,7 +2746,93 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectV2Read"];
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_summaries_api_projects_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectSummary"][];
+                };
+            };
+        };
+    };
+    get_project_api_projects__project_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_project_api_projects__project_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectRead"];
                 };
             };
             /** @description Validation Error */
