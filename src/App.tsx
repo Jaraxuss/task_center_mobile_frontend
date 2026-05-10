@@ -42,7 +42,24 @@ import type {
   TaskActionType,
   TaskFormState,
 } from './lib';
-import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, KnowledgeFactCustomerOverview, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
+import {
+  CompactFactRow,
+  DetailItem,
+  EmptyHint,
+  ExpandToggleIcon,
+  FactRow,
+  FactStatusPill,
+  MaterialRow,
+  MaterialRowWithCustomer,
+  MoveArrowIcon,
+  PinIcon,
+  StateCard,
+  StatusPill,
+  TaskRow,
+  factStatusLabelMap,
+  materialStatusLabelMap,
+} from './components';
+import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, KnowledgeFactCustomerOverview, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
 import { TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
 type ThemeMode = 'light' | 'dark';
@@ -61,19 +78,6 @@ const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'knowledge', label: '知识', icon: '◇' },
   { key: 'history', label: '历史', icon: '↺' },
 ];
-
-const materialStatusLabelMap: Record<CustomerMaterialStatus, string> = {
-  pending: '待审核',
-  approved: '已确认',
-  skipped: '已跳过',
-  uploaded: '已上传',
-};
-
-const factStatusLabelMap: Record<FactStatus, string> = {
-  draft: '草稿',
-  confirmed: '已确认',
-  rejected: '已驳回',
-};
 
 const factValueTypeOptions = ['客户需求', '业务流程', '系统限制', '关键人信息', '客户偏好', '风险/阻塞', '解决方案', '商机/增购/续费', '售后问题', '可复用方法论'];
 
@@ -1731,92 +1735,6 @@ function HistoryDaySection({
   );
 }
 
-function TaskRow({
-  task,
-  onClick,
-  showUpdated = false,
-  descriptionMaxLength,
-}: {
-  task: Task;
-  onClick: () => void;
-  showUpdated?: boolean;
-  descriptionMaxLength?: number;
-}) {
-  return (
-    <button type="button" className="task-row task-row-button" onClick={onClick}>
-      <div className="task-row-main">
-        <div className="task-title">{task.title}</div>
-        <div className="task-meta">
-          <StatusPill status={task.status} />
-          <span className="task-meta-time">{formatDateTime(getTaskScheduleAt(task))}</span>
-          {task.project && <span className="project-pill">{task.project}</span>}
-          {task.recurrence?.enabled && <span className="inline-badge">{describeRecurrence(task.recurrence)}</span>}
-        </div>
-        {task.description && <div className="task-desc">{truncateText(task.description, descriptionMaxLength)}</div>}
-      </div>
-      <div className="task-row-tail">{showUpdated ? formatDateTime(task.updated_at) : '›'}</div>
-    </button>
-  );
-}
-
-function MoveArrowIcon({ direction }: { direction: 'up' | 'down' }) {
-  // Lucide-style chevron-up / chevron-down
-  return (
-    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true">
-      {direction === 'up' ? (
-        <polyline points="6 15 12 9 18 15" />
-      ) : (
-        <polyline points="6 9 12 15 18 9" />
-      )}
-    </svg>
-  );
-}
-
-function PinIcon({ active }: { active: boolean }) {
-  // Lucide-style pin: tilted needle with rounded head
-  return (
-    <svg
-      className={active ? 'icon-svg icon-svg-pin-active' : 'icon-svg'}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path d="M12 17v5" />
-      <path d="M9 10.76V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v5.76a3 3 0 0 0 1.13 2.34L18 15H6l1.87-1.9A3 3 0 0 0 9 10.76Z" />
-    </svg>
-  );
-}
-
-function ExpandToggleIcon({ expanded }: { expanded: boolean }) {
-  // Lucide-style: minimize-2 when expanded, maximize-2 when collapsed
-  return (
-    <svg className="icon-svg" viewBox="0 0 24 24" aria-hidden="true" style={{ width: 18, height: 18 }}>
-      {expanded ? (
-        <>
-          <polyline points="4 14 10 14 10 20" />
-          <polyline points="20 10 14 10 14 4" />
-          <line x1="14" y1="10" x2="21" y2="3" />
-          <line x1="3" y1="21" x2="10" y2="14" />
-        </>
-      ) : (
-        <>
-          <polyline points="15 3 21 3 21 9" />
-          <polyline points="9 21 3 21 3 15" />
-          <line x1="21" y1="3" x2="14" y2="10" />
-          <line x1="3" y1="21" x2="10" y2="14" />
-        </>
-      )}
-    </svg>
-  );
-}
-
-function StatusPill({ status }: { status: Task['status'] }) {
-  return <span className={`status-pill status-${status}`}>{statusLabelMap[status]}</span>;
-}
-
-function MaterialStatusPill({ status }: { status: CustomerMaterialStatus }) {
-  return <span className={`material-status-pill material-status-${status}`}>{materialStatusLabelMap[status]}</span>;
-}
-
 function KnowledgeHero({
   mode,
   onChangeMode,
@@ -1947,35 +1865,6 @@ function MaterialBatchGroupSection({
         </div>
       )}
     </section>
-  );
-}
-
-function MaterialRowWithCustomer({
-  material,
-  customerName,
-  onOpen,
-}: {
-  material: CustomerMaterial;
-  customerName: string | null;
-  onOpen: () => void;
-}) {
-  const preview = material.raw_facts_markdown || '暂无正文';
-  return (
-    <article className="material-row">
-      <button type="button" className="material-row-main" onClick={onOpen}>
-        <div className="material-row-title-line">
-          <strong>{material.title}</strong>
-          <MaterialStatusPill status={material.status} />
-        </div>
-        <div className="material-row-meta">
-          {customerName && <span>{customerName}</span>}
-          {material.period_start && material.period_end && (
-            <span>{(material.period_start || '').slice(0, 10)} ~ {(material.period_end || '').slice(0, 10)}</span>
-          )}
-        </div>
-        <p>{truncateText(preview, 160)}</p>
-      </button>
-    </article>
   );
 }
 
@@ -2146,90 +2035,6 @@ function FactCustomerGroupSection({
         </div>
       )}
     </section>
-  );
-}
-
-function FactRow({ fact, onOpen }: { fact: Fact; onOpen: () => void }) {
-  const preview = fact.raw_markdown || '暂无正文';
-  return (
-    <article className="material-row fact-row">
-      <button type="button" className="material-row-main" onClick={onOpen}>
-        <div className="material-row-title-line">
-          <strong>{fact.title || '（无标题）'}</strong>
-          <FactStatusPill status={fact.status} />
-        </div>
-        <div className="material-row-meta">
-          {fact.fact_date && <span>{(fact.fact_date || '').slice(0, 10)}</span>}
-          {fact.source_type && <span>{fact.source_type}</span>}
-          {fact.task_id != null && <span>任务 #{fact.task_id}</span>}
-        </div>
-        {fact.value_types.length > 0 && (
-          <div className="material-value-types">
-            {fact.value_types.map((type) => <span key={type}>{type}</span>)}
-          </div>
-        )}
-        <p>{truncateText(preview, 140)}</p>
-      </button>
-    </article>
-  );
-}
-
-function FactStatusPill({ status }: { status: FactStatus }) {
-  return <span className={`material-status-pill material-status-${status}`}>{factStatusLabelMap[status]}</span>;
-}
-
-function CompactFactRow({
-  fact,
-  customerName,
-  onOpen,
-}: {
-  fact: Fact;
-  customerName: string | null;
-  onOpen: () => void;
-}) {
-  return (
-    <article className="material-row material-row-compact fact-row task-fact-row">
-      <button type="button" className="material-row-main task-fact-row-main" onClick={onOpen}>
-        <div className="task-fact-row-line">
-          <strong className="task-fact-row-title">{fact.title || '（无标题）'}</strong>
-          <FactStatusPill status={fact.status} />
-        </div>
-        <div className="task-fact-row-meta">
-          {customerName && <span>{customerName}</span>}
-          {fact.fact_date && <span>{(fact.fact_date || '').slice(0, 10)}</span>}
-        </div>
-      </button>
-    </article>
-  );
-}
-
-function MaterialRow({
-  material,
-  compact = false,
-  onOpen,
-}: {
-  material: CustomerMaterial;
-  compact?: boolean;
-  onOpen: () => void;
-}) {
-  const preview = material.raw_facts_markdown || '暂无正文';
-  const period = material.period_start && material.period_end
-    ? `${(material.period_start || '').slice(0, 10)} ~ ${(material.period_end || '').slice(0, 10)}`
-    : formatDateTime(material.material_date || material.updated_at);
-  return (
-    <article className={compact ? 'material-row material-row-compact' : 'material-row'}>
-      <button type="button" className="material-row-main" onClick={onOpen}>
-        <div className="material-row-title-line">
-          <strong>{material.title}</strong>
-          <MaterialStatusPill status={material.status} />
-        </div>
-        <div className="material-row-meta">
-          <span>{period}</span>
-          {material.task_id != null && <span>任务 #{material.task_id}</span>}
-        </div>
-        <p>{truncateText(preview, compact ? 80 : 160)}</p>
-      </button>
-    </article>
   );
 }
 
@@ -2609,15 +2414,6 @@ function TaskEditorSheet({
           ))}
         </datalist>
       </div>
-    </div>
-  );
-}
-
-function DetailItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="detail-item">
-      <div className="detail-label">{label}</div>
-      <div>{value}</div>
     </div>
   );
 }
@@ -3113,14 +2909,6 @@ function SettingsSheet({
       </div>
     </div>
   );
-}
-
-function StateCard({ text, tone = 'default' }: { text: string; tone?: 'default' | 'danger' }) {
-  return <div className={tone === 'danger' ? 'state-card state-danger' : 'state-card'}>{text}</div>;
-}
-
-function EmptyHint({ label }: { label: string }) {
-  return <div className="empty-hint">{label}</div>;
 }
 
 export default App;
