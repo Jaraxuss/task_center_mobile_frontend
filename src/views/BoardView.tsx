@@ -1,6 +1,7 @@
-import { ExpandToggleIcon } from '../components';
+import { ExpandToggleIcon, MoveArrowIcon, PinIcon } from '../components';
+import { TaskGroupSection } from './TaskGroupSection';
 import type { BoardMode } from '../lib';
-import { ProjectSummary } from '../types';
+import { BoardPreferences, DashboardBoardGroup, ProjectSummary, Task, TaskStatus } from '../types';
 
 export function BoardHero({
   mode,
@@ -84,5 +85,117 @@ export function BoardHero({
         </div>
       ) : null}
     </section>
+  );
+}
+
+export function BoardGroupItem({
+  group,
+  boardMode,
+  boardGroupDescriptions,
+  boardPreferenceData,
+  boardProjectGroups,
+  expandedProjectKeys,
+  expandedStatusKeys,
+  boardContentMaxLength,
+  onOpenTask,
+  onToggleProjectKey,
+  onToggleStatusKey,
+  onMoveProjectGroup,
+  onTogglePinnedProject,
+}: {
+  group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] };
+  boardMode: BoardMode;
+  boardGroupDescriptions: Record<TaskStatus, string>;
+  boardPreferenceData: BoardPreferences;
+  boardProjectGroups: Array<{ key: string; title: string; tasks: Task[] }>;
+  expandedProjectKeys: string[];
+  expandedStatusKeys: string[];
+  boardContentMaxLength: number;
+  onOpenTask: (task: Task) => void;
+  onToggleProjectKey: (key: string) => void;
+  onToggleStatusKey: (key: string) => void;
+  onMoveProjectGroup: (title: string, direction: 'up' | 'down') => void;
+  onTogglePinnedProject: (title: string) => void;
+}) {
+  const statusAccent = boardMode === 'status'
+    ? ((group.key === 'todo'
+        ? 'brand'
+        : group.key === 'doing'
+          ? 'plan'
+          : group.key === 'deferred'
+            ? 'warning'
+            : group.key === 'done'
+              ? 'success'
+              : 'muted') as 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board')
+    : ((group.tasks.length > 0 ? 'plan' : 'muted') as 'danger' | 'warning' | 'brand' | 'plan' | 'muted' | 'success' | 'board');
+  const description = boardMode === 'status'
+    ? boardGroupDescriptions[group.key as TaskStatus]
+    : undefined;
+  const isProjectGroup = boardMode === 'project';
+  const pinned = isProjectGroup && boardPreferenceData.pinned_projects.includes(group.title);
+  const projectIndex = isProjectGroup ? boardProjectGroups.findIndex((item) => item.key === group.key) : -1;
+  const previousProject = projectIndex > 0 ? boardProjectGroups[projectIndex - 1] : null;
+  const nextProject = projectIndex >= 0 && projectIndex < boardProjectGroups.length - 1 ? boardProjectGroups[projectIndex + 1] : null;
+  const canMoveProjectUp = Boolean(
+    isProjectGroup
+      && previousProject
+      && boardPreferenceData.pinned_projects.includes(previousProject.title) === pinned,
+  );
+  const canMoveProjectDown = Boolean(
+    isProjectGroup
+      && nextProject
+      && boardPreferenceData.pinned_projects.includes(nextProject.title) === pinned,
+  );
+  const statusCollapsed = !expandedStatusKeys.includes(group.key);
+
+  return (
+    <TaskGroupSection
+      key={group.key}
+      title={group.title}
+      description={description}
+      tasks={group.tasks}
+      accent={statusAccent}
+      onOpenTask={onOpenTask}
+      variant="board"
+      taskDescriptionMaxLength={boardContentMaxLength}
+      collapsed={isProjectGroup ? !expandedProjectKeys.includes(group.key) : statusCollapsed}
+      onToggleCollapsed={isProjectGroup
+        ? () => onToggleProjectKey(group.key)
+        : () => onToggleStatusKey(group.key)}
+      countLabel={isProjectGroup ? String(group.tasks.length) : `${group.tasks.length} 项`}
+      showToggleIcon={!isProjectGroup}
+      actions={isProjectGroup ? (
+        <div className="project-group-actions-grid">
+          <button
+            type="button"
+            className="mini-icon-button project-group-action-button project-group-action-button-up"
+            disabled={!canMoveProjectUp}
+            onClick={() => onMoveProjectGroup(group.title, 'up')}
+            aria-label={`上移客户 ${group.title}`}
+          >
+            <MoveArrowIcon direction="up" />
+          </button>
+          <button
+            type="button"
+            className={pinned
+              ? 'mini-icon-button mini-icon-button-active project-group-action-button project-group-action-button-pin'
+              : 'mini-icon-button project-group-action-button project-group-action-button-pin project-group-action-button-pin-inactive'}
+            onClick={() => onTogglePinnedProject(group.title)}
+            aria-label={pinned ? `取消置顶客户 ${group.title}` : `置顶客户 ${group.title}`}
+          >
+            {pinned ? <PinIcon active /> : <PinIcon active={false} />}
+          </button>
+          <button
+            type="button"
+            className="mini-icon-button project-group-action-button project-group-action-button-down"
+            disabled={!canMoveProjectDown}
+            onClick={() => onMoveProjectGroup(group.title, 'down')}
+            aria-label={`下移客户 ${group.title}`}
+          >
+            <MoveArrowIcon direction="down" />
+          </button>
+        </div>
+      ) : undefined}
+    />
   );
 }

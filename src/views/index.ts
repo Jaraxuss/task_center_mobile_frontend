@@ -1,4 +1,4 @@
-export { BoardHero } from './BoardView';
+export { BoardGroupItem, BoardHero } from './BoardView';
 export { HistoryDaySection, HistoryHero } from './HistoryView';
 export { FactCustomerGroupSection, KnowledgeFactCustomerCard, KnowledgeHero, MaterialBatchGroupSection } from './KnowledgeView';
 export { PlanDaySection, PlanHero } from './PlanView';
