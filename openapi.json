@@ -1712,55 +1712,6 @@
         "title": "PlanSummary",
         "type": "object"
       },
-      "ProjectRenameRequest": {
-        "properties": {
-          "new_name": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "New Name",
-            "type": "string"
-          },
-          "old_name": {
-            "maxLength": 128,
-            "minLength": 1,
-            "title": "Old Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "old_name",
-          "new_name"
-        ],
-        "title": "ProjectRenameRequest",
-        "type": "object"
-      },
-      "ProjectRenameResponse": {
-        "properties": {
-          "new_name": {
-            "title": "New Name",
-            "type": "string"
-          },
-          "old_name": {
-            "title": "Old Name",
-            "type": "string"
-          },
-          "project": {
-            "$ref": "#/components/schemas/ProjectSummary"
-          },
-          "updated_task_count": {
-            "title": "Updated Task Count",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "old_name",
-          "new_name",
-          "updated_task_count",
-          "project"
-        ],
-        "title": "ProjectRenameResponse",
-        "type": "object"
-      },
       "ProjectSummary": {
         "properties": {
           "done_task_count": {
@@ -5446,47 +5397,6 @@
         "summary": "Update Project V2",
         "tags": [
           "projects-v2"
-        ]
-      }
-    },
-    "/api/projects/rename": {
-      "patch": {
-        "operationId": "rename_project_api_projects_rename_patch",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectRenameRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProjectRenameResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Rename Project",
-        "tags": [
-          "projects"
         ]
       }
     },
