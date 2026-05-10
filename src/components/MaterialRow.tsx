@@ -25,7 +25,6 @@ export function MaterialRow({
         </div>
         <div className="material-row-meta">
           <span>{period}</span>
-          {material.task_id != null && <span>任务 #{material.task_id}</span>}
         </div>
         <p>{truncateText(preview, compact ? 80 : 160)}</p>
       </button>

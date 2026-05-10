@@ -39,7 +39,7 @@ export type Task = Omit<Schemas['TaskDetail'], 'status' | 'recurrence'> & {
   status: TaskStatus;
   recurrence?: TaskRecurrence | null;
 };
-export type CustomerMaterial = Omit<Schemas['CustomerMaterialRead'], 'status'> & { status: CustomerMaterialStatus };
+export type CustomerMaterial = Omit<Schemas['CustomerMaterialRead'], 'status' | 'project' | 'source_type' | 'source' | 'source_refs' | 'value_types' | 'task_id'> & { status: CustomerMaterialStatus };
 export type CustomerMaterialFact = Schemas['CustomerMaterialFactRead'];
 export type ReviewBatch = Schemas['ReviewBatchRead'];
 export type Customer = Schemas['CustomerRead'];
@@ -117,11 +117,8 @@ export interface CustomerMaterialFilters {
   project_v2_id?: number;
   review_batch_id?: number;
   material_type?: string;
-  project?: string;
   q?: string;
   status?: CustomerMaterialStatus | '';
-  value_type?: string;
-  task_id?: number;
   include_archived?: boolean;
   limit?: number;
 }

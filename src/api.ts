@@ -201,15 +201,7 @@ function normalizeCustomerMaterial(material: any): CustomerMaterial {
       material.generation_meta && typeof material.generation_meta === 'object' && !Array.isArray(material.generation_meta)
         ? material.generation_meta
         : null,
-    project: material.project ?? null,
     material_date: material.material_date ?? null,
-    source_type: String(material.source_type || ''),
-    source: String(material.source || ''),
-    source_refs: material.source_refs && typeof material.source_refs === 'object' && !Array.isArray(material.source_refs) ? material.source_refs : {},
-    value_types: Array.isArray(material.value_types)
-      ? material.value_types.map((item: unknown) => String(item || '').trim()).filter(Boolean)
-      : [],
-    task_id: material.task_id == null ? null : Number(material.task_id),
   };
 }
 

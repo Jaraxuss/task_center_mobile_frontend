@@ -116,7 +116,7 @@ function App() {
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
-  const projectsV2 = useAsyncData(() => api.getProjectsV2(), [], editorMode !== null);
+  const projectsV2 = useAsyncData(() => api.getProjectsV2(), [], editorMode !== null || materialDraft !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const knowledgePreferences = useAsyncData(() => api.getKnowledgePreferences(), [], activeTab === 'knowledge');
   const knowledgeFactOverview = useAsyncData(
@@ -600,6 +600,9 @@ function App() {
           ? (reviewBatches.data || []).find((b) => b.id === material.review_batch_id) ?? null
           : null;
         const customer = material?.customer_id != null ? customerMap.get(material.customer_id) ?? null : null;
+        const projMatch = material?.project_v2_id != null
+          ? (projectsV2.data || []).find((p) => p.id === material.project_v2_id)
+          : null;
         const linkedFacts = materialLinkedFacts;
         return (
           <MaterialEditorSheet
@@ -607,6 +610,7 @@ function App() {
             material={material}
             batch={batch}
             customer={customer}
+            projectName={projMatch?.name ?? null}
             linkedFacts={linkedFacts}
             factsLoading={materialFactsLoading}
             onChange={(next) => setMaterialDraft(next)}

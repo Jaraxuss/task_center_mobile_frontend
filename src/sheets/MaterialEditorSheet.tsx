@@ -16,6 +16,7 @@ export function MaterialEditorSheet({
   material,
   batch,
   customer,
+  projectName,
   linkedFacts,
   factsLoading,
   onChange,
@@ -30,6 +31,7 @@ export function MaterialEditorSheet({
   material: CustomerMaterial | null;
   batch: ReviewBatch | null;
   customer: Customer | null;
+  projectName: string | null;
   linkedFacts: Fact[];
   factsLoading: boolean;
   onChange: (value: MaterialFormState) => void;
@@ -73,7 +75,7 @@ export function MaterialEditorSheet({
               </div>
               <div className="editor-field">
                 <span className="editor-label">项目</span>
-                <div className="editor-readonly">{material?.project || '—'}</div>
+                <div className="editor-readonly">{projectName || '—'}</div>
               </div>
               <div className="editor-field">
                 <span className="editor-label">周期</span>
