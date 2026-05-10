@@ -1,50 +1,57 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { useAsyncData, usePersistentState } from './hooks';
-import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, KnowledgeFactCustomerOverview, KnowledgeFactProjectOverview, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskRecurrence, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
-import { APP_TIME_ZONE, TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, fallbackPlanGroups, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByDue, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
+import {
+  BOARD_CONTENT_MAX_DEFAULT,
+  BOARD_CONTENT_MAX_LIMIT,
+  BOARD_CONTENT_MAX_MIN,
+  boardTitles,
+  buildHash,
+  buildProjectOrderPayload,
+  buildRecurrencePayload,
+  clampBoardContentMaxLength,
+  formatDateTimeInput,
+  getHistoryDateGroups,
+  getTaskScheduleAt,
+  groupFactsByCustomer,
+  groupMaterialsByBatch,
+  localNowString,
+  makeFactFormState,
+  makeMaterialFormState,
+  makeOptimisticTask,
+  makeTaskFormState,
+  parseRouteState,
+  regroupBoardStatusGroups,
+  regroupPlanGroups,
+  sortKnowledgeCustomersWithPreference,
+  sortProjectGroupsWithPreference,
+  sortTasksWithPreference,
+  statusOrder,
+  toIsoOrNull,
+  truncateText,
+  upsertTask,
+} from './lib';
+import type {
+  BoardMode,
+  FactCustomerGroup,
+  FactFormState,
+  KnowledgeMode,
+  MaterialBatchGroup,
+  MaterialFormState,
+  TabKey,
+  TaskActionType,
+  TaskFormState,
+} from './lib';
+import { BoardPreferences, Customer, CustomerMaterial, CustomerMaterialFact, CustomerMaterialStatus, DashboardBoardGroup, DashboardPlan, DashboardToday, Fact, FactStatus, HistoryResponse, KnowledgeFactCustomerOverview, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, ProjectSummary, ReviewBatch, Task, TaskStatus, UpdateCustomerMaterialPayload, UpdateFactPayload, UpdateTaskPayload } from './types';
+import { TimeFormatMode, currentDateKey, describeRecurrence, describeRecurrenceMeta, formatDateLabel, formatDateTime, formatDateTimeShort, getDateKey, groupTasksByProject, groupTodayTasks, normalizeWeekdays, sortTasksByUpdated, statusLabelMap, toDateMillis } from './utils';
 
-type TabKey = 'today' | 'plan' | 'board' | 'knowledge' | 'history';
-type BoardMode = 'status' | 'project';
-type KnowledgeMode = 'materials' | 'facts';
 type ThemeMode = 'light' | 'dark';
-type TaskActionType = 'complete' | 'reschedule' | 'defer' | 'cancel';
 type TaskFormMode = 'create' | 'edit';
 
 interface ActionSheetState {
   type: TaskActionType;
   datetime: string;
   reason: string;
-}
-
-interface TaskFormState {
-  title: string;
-  due_at: string;
-  project: string;
-  description: string;
-  status: TaskStatus;
-  recurrence_enabled: boolean;
-  recurrence_frequency: 'daily' | 'weekly' | 'monthly';
-  recurrence_interval: string;
-  recurrence_weekdays: number[];
-  recurrence_month_day: string;
-  recurrence_until: string;
-}
-
-interface MaterialFormState {
-  id: number;
-  title: string;
-  raw_facts_markdown: string;
-  status: CustomerMaterialStatus;
-}
-
-interface FactFormState {
-  id: number;
-  title: string;
-  raw_markdown: string;
-  fact_date: string;
-  status: FactStatus;
-  value_types: string[];
 }
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
@@ -84,35 +91,11 @@ const materialTypeLabelMap: Record<string, string> = {
   project_digest: '项目摘要',
 };
 
-const statusOrder: TaskStatus[] = ['todo', 'doing', 'deferred', 'done', 'canceled'];
-
-const BOARD_CONTENT_MAX_MIN = 20;
-const BOARD_CONTENT_MAX_DEFAULT = 50;
-const BOARD_CONTENT_MAX_LIMIT = 200;
-
 const timeFormatOptions: Array<{ value: TimeFormatMode; label: string; sample: string }> = [
   { value: 'cn-short', label: '月/日 24 小时', sample: '04/19 20:30' },
   { value: 'ymd-24', label: '年-月-日 24 小时', sample: '2026/04/19 20:30' },
   { value: 'slash-24', label: '年/月/日 24 小时', sample: '2026/04/19 20:30' },
 ];
-
-function clampBoardContentMaxLength(value: number) {
-  if (!Number.isFinite(value)) return BOARD_CONTENT_MAX_DEFAULT;
-  return Math.min(BOARD_CONTENT_MAX_LIMIT, Math.max(BOARD_CONTENT_MAX_MIN, Math.round(value)));
-}
-
-function truncateText(value: string, maxLength?: number) {
-  if (!maxLength || value.length <= maxLength) return value;
-  return `${value.slice(0, Math.max(0, maxLength)).trimEnd()}…`;
-}
-
-const boardTitles: Record<TaskStatus, string> = {
-  todo: '待办',
-  doing: '进行中',
-  deferred: '已延期',
-  done: '已完成',
-  canceled: '已取消',
-};
 
 const boardGroupDescriptions: Record<TaskStatus, string> = {
   todo: '还没开动，但已经进入手里这盘活。先排优先级，再决定谁先推进。',
@@ -137,400 +120,6 @@ const weekdayOptions = [
   { value: 6, label: '六' },
   { value: 7, label: '日' },
 ];
-
-function formatDateTimeInput(value?: string | null) {
-  if (!value) return '';
-  const normalized = value.trim().replace(' ', 'T');
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return normalized;
-  const withSecondsMatch = normalized.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}):\d{2}(?:\.\d+)?$/);
-  if (withSecondsMatch) return withSecondsMatch[1];
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: APP_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).formatToParts(date);
-  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
-  return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
-}
-
-function toIsoOrNull(value: string) {
-  if (!value) return null;
-  const normalized = value.trim().replace(' ', 'T');
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(normalized)) return null;
-  return new Date(`${normalized}:00+08:00`).toISOString();
-}
-
-function localNowString() {
-  return toIsoOrNull(formatDateTimeInput(new Date().toISOString())) || new Date().toISOString();
-}
-
-function getTaskScheduleAt(task?: Task | null) {
-  if (!task) return null;
-  return task.deferred_to || task.due_at || null;
-}
-
-function makeTaskFormState(task?: Task | null): TaskFormState {
-  const recurrence = task?.recurrence;
-  const frequency = recurrence?.frequency === 'daily' || recurrence?.frequency === 'weekly' || recurrence?.frequency === 'monthly' ? recurrence.frequency : 'weekly';
-  return {
-    title: task?.title || '',
-    due_at: formatDateTimeInput(getTaskScheduleAt(task || undefined)),
-    project: task?.project || '',
-    description: task?.description || '',
-    status: task?.status || 'todo',
-    recurrence_enabled: Boolean(recurrence?.enabled),
-    recurrence_frequency: frequency,
-    recurrence_interval: String(Math.max(1, Number(recurrence?.interval || 1) || 1)),
-    recurrence_weekdays: normalizeWeekdays(recurrence?.days_of_week),
-    recurrence_month_day: recurrence?.day_of_month ? String(recurrence.day_of_month) : '',
-    recurrence_until: formatDateTimeInput(recurrence?.end_at || ''),
-  };
-}
-
-function makeMaterialFormState(material: CustomerMaterial): MaterialFormState {
-  return {
-    id: material.id,
-    title: material.title || '',
-    raw_facts_markdown: material.raw_facts_markdown || '',
-    status: material.status || 'pending',
-  };
-}
-
-function makeFactFormState(fact: Fact): FactFormState {
-  return {
-    id: fact.id,
-    title: fact.title || '',
-    raw_markdown: fact.raw_markdown || '',
-    fact_date: formatDateTimeInput(fact.fact_date || ''),
-    status: fact.status || 'draft',
-    value_types: [...(fact.value_types || [])],
-  };
-}
-
-interface MaterialBatchGroup {
-  key: string;
-  batch: ReviewBatch | null;
-  materials: CustomerMaterial[];
-}
-
-function groupMaterialsByBatch(
-  materials: CustomerMaterial[],
-  batches: ReviewBatch[],
-): MaterialBatchGroup[] {
-  const batchMap = new Map<number, ReviewBatch>();
-  batches.forEach((b) => batchMap.set(b.id, b));
-  const grouped = new Map<string, CustomerMaterial[]>();
-  materials.forEach((m) => {
-    const key = m.review_batch_id != null ? `batch-${m.review_batch_id}` : 'unbatched';
-    const list = grouped.get(key) || [];
-    list.push(m);
-    grouped.set(key, list);
-  });
-  const groups: MaterialBatchGroup[] = Array.from(grouped.entries()).map(([key, list]) => {
-    const batchId = key.startsWith('batch-') ? Number(key.slice('batch-'.length)) : null;
-    const batch = batchId != null ? batchMap.get(batchId) ?? null : null;
-    return {
-      key,
-      batch,
-      materials: [...list].sort((a, b) => toDateMillis(b.updated_at) - toDateMillis(a.updated_at)),
-    };
-  });
-  // sort: batched groups first by period_end desc, then unbatched last
-  groups.sort((a, b) => {
-    if (!a.batch && b.batch) return 1;
-    if (a.batch && !b.batch) return -1;
-    if (!a.batch && !b.batch) return 0;
-    const aEnd = a.batch?.period_end ? toDateMillis(a.batch.period_end) : 0;
-    const bEnd = b.batch?.period_end ? toDateMillis(b.batch.period_end) : 0;
-    return bEnd - aEnd;
-  });
-  return groups;
-}
-
-interface FactCustomerGroup {
-  key: string;
-  title: string;
-  customer: Customer | null;
-  facts: Fact[];
-}
-
-function groupFactsByCustomer(facts: Fact[], customers: Customer[]): FactCustomerGroup[] {
-  const customerMap = new Map<number, Customer>();
-  customers.forEach((c) => customerMap.set(c.id, c));
-  const grouped = new Map<string, Fact[]>();
-  facts.forEach((f) => {
-    const key = f.customer_id != null ? `customer-${f.customer_id}` : 'no-customer';
-    const list = grouped.get(key) || [];
-    list.push(f);
-    grouped.set(key, list);
-  });
-  const groups: FactCustomerGroup[] = Array.from(grouped.entries()).map(([key, list]) => {
-    const cid = key.startsWith('customer-') ? Number(key.slice('customer-'.length)) : null;
-    const customer = cid != null ? customerMap.get(cid) ?? null : null;
-    const title = customer?.name || (cid != null ? `客户 #${cid}` : '未归类');
-    return {
-      key,
-      title,
-      customer,
-      facts: [...list].sort((a, b) => toDateMillis(b.fact_date || b.updated_at) - toDateMillis(a.fact_date || a.updated_at)),
-    };
-  });
-  groups.sort((a, b) => {
-    if (!a.customer && b.customer) return 1;
-    if (a.customer && !b.customer) return -1;
-    return a.title.localeCompare(b.title, 'zh-Hans-CN');
-  });
-  return groups;
-}
-
-function buildRecurrencePayload(draft: TaskFormState, dueAt: string | null): TaskRecurrence | null {
-  if (!draft.recurrence_enabled || !dueAt) return null;
-
-  const interval = Math.max(1, Number(draft.recurrence_interval || 1) || 1);
-  const dueDate = new Date(dueAt);
-  const daysOfWeek = draft.recurrence_frequency === 'weekly'
-    ? normalizeWeekdays(draft.recurrence_weekdays.length ? draft.recurrence_weekdays : [((dueDate.getDay() + 6) % 7) + 1])
-    : [];
-  const dayOfMonth = draft.recurrence_frequency === 'monthly'
-    ? Math.min(31, Math.max(1, Number(draft.recurrence_month_day || dueDate.getDate()) || 1))
-    : null;
-  const hours = String(dueDate.getHours()).padStart(2, '0');
-  const minutes = String(dueDate.getMinutes()).padStart(2, '0');
-
-  return {
-    enabled: true,
-    frequency: draft.recurrence_frequency,
-    interval,
-    days_of_week: daysOfWeek,
-    day_of_month: dayOfMonth,
-    end_at: toIsoOrNull(draft.recurrence_until),
-    timezone: APP_TIME_ZONE,
-    time_of_day: `${hours}:${minutes}:00`,
-    start_at: dueAt,
-  };
-}
-
-function parseRouteState() {
-  if (typeof window === 'undefined') {
-    return {
-      tab: 'today' as TabKey,
-      boardMode: 'status' as BoardMode,
-      knowledgeMode: 'materials' as KnowledgeMode,
-      historyDraft: { q: '', status: '', date: '' },
-    };
-  }
-
-  const raw = window.location.hash.replace(/^#/, '') || '/today';
-  const [pathPart, searchPart = ''] = raw.split('?');
-  // Back-compat: old `#/materials` -> knowledge tab, materials sub-mode
-  let rawTab: string = tabs.some((item) => `/${item.key}` === pathPart) ? pathPart.slice(1) : 'today';
-  if (pathPart === '/materials') rawTab = 'knowledge';
-  const tab = rawTab as TabKey;
-  const params = new URLSearchParams(searchPart);
-  const knowledgeModeRaw = params.get('mode');
-  const knowledgeMode: KnowledgeMode = knowledgeModeRaw === 'facts' ? 'facts' : 'materials';
-  return {
-    tab,
-    boardMode: params.get('mode') === 'project' ? ('project' as BoardMode) : ('status' as BoardMode),
-    knowledgeMode,
-    historyDraft: {
-      q: params.get('q') || '',
-      status: params.get('status') || '',
-      date: params.get('date') || '',
-    },
-  };
-}
-
-function buildHash(
-  tab: TabKey,
-  boardMode: BoardMode,
-  knowledgeMode: KnowledgeMode,
-  historyFilters: { q: string; status: string; date: string },
-) {
-  const params = new URLSearchParams();
-  if (tab === 'board' && boardMode !== 'status') params.set('mode', boardMode);
-  if (tab === 'knowledge' && knowledgeMode !== 'materials') params.set('mode', knowledgeMode);
-  if (tab === 'history') {
-    if (historyFilters.q) params.set('q', historyFilters.q);
-    if (historyFilters.status) params.set('status', historyFilters.status);
-    if (historyFilters.date) params.set('date', historyFilters.date);
-  }
-  const query = params.toString();
-  return `#/${tab}${query ? `?${query}` : ''}`;
-}
-
-function regroupPlanGroups(groups: PlanGroup[], updated: Task) {
-  const all = groups.flatMap((group) => group.tasks).filter((task, index, list) => list.findIndex((item) => item.id === task.id) === index && task.id !== updated.id);
-  const scheduleDate = getDateKey(updated.deferred_to || updated.due_at);
-  if (updated.status !== 'done' && updated.status !== 'canceled' && scheduleDate && scheduleDate > currentDateKey()) {
-    all.push(updated);
-  }
-  return fallbackPlanGroups(all);
-}
-
-function regroupBoardStatusGroups(groups: DashboardBoardGroup[], updated: Task) {
-  const all = groups.flatMap((group) => group.tasks).filter((task, index, list) => list.findIndex((item) => item.id === task.id) === index && task.id !== updated.id);
-  all.push(updated);
-  return statusOrder.map((status) => ({
-    key: status,
-    status,
-    title: boardTitles[status],
-    tasks: sortTasksByDue(all.filter((task) => task.status === status)),
-  }));
-}
-
-function upsertTask(list: Task[], updated: Task) {
-  const exists = list.some((task) => task.id === updated.id);
-  const next = exists ? list.map((task) => (task.id === updated.id ? updated : task)) : [updated, ...list];
-  return sortTasksByUpdated(next);
-}
-
-function sortTasksWithPreference(tasks: Task[], taskOrder: number[]) {
-  const orderMap = new Map(taskOrder.map((taskId, index) => [taskId, index]));
-  return [...tasks].sort((a, b) => {
-    const aIndex = orderMap.get(a.id);
-    const bIndex = orderMap.get(b.id);
-    if (aIndex != null || bIndex != null) {
-      if (aIndex != null && bIndex != null) return aIndex - bIndex;
-      return aIndex != null ? -1 : 1;
-    }
-    const byDue = sortTasksByDue([a, b]);
-    return byDue[0]?.id === a.id ? -1 : 1;
-  });
-}
-
-function sortProjectGroupsWithPreference(groups: Array<{ key: string; title: string; tasks: Task[] }>, pinnedProjects: string[], projectOrder: string[]) {
-  const pinnedMap = new Map(pinnedProjects.map((name, index) => [name, index]));
-  const projectOrderMap = new Map(projectOrder.map((name, index) => [name, index]));
-
-  return [...groups].sort((a, b) => {
-    const aPinned = pinnedMap.has(a.title);
-    const bPinned = pinnedMap.has(b.title);
-    if (aPinned || bPinned) {
-      if (aPinned && bPinned) {
-        const aPinnedIndex = pinnedMap.get(a.title) ?? 10 ** 9;
-        const bPinnedIndex = pinnedMap.get(b.title) ?? 10 ** 9;
-        if (aPinnedIndex !== bPinnedIndex) return aPinnedIndex - bPinnedIndex;
-      } else {
-        return aPinned ? -1 : 1;
-      }
-    }
-
-    const aOrdered = projectOrderMap.has(a.title);
-    const bOrdered = projectOrderMap.has(b.title);
-    if (aOrdered || bOrdered) {
-      if (aOrdered && bOrdered) return (projectOrderMap.get(a.title) ?? 0) - (projectOrderMap.get(b.title) ?? 0);
-      return aOrdered ? -1 : 1;
-    }
-
-    return a.title.localeCompare(b.title, 'zh-CN');
-  });
-}
-
-function buildProjectOrderPayload(groups: Array<{ key: string; title: string; tasks: Task[] }>, currentOrder: string[], movingProjectName: string, direction: 'up' | 'down') {
-  const visibleNames = groups.map((group) => group.title);
-  const preferredVisible = currentOrder.filter((projectName) => visibleNames.includes(projectName));
-  const remainingVisible = visibleNames.filter((projectName) => !preferredVisible.includes(projectName));
-  const orderedVisible = [...preferredVisible, ...remainingVisible];
-  const currentIndex = orderedVisible.indexOf(movingProjectName);
-  const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
-
-  if (currentIndex < 0 || targetIndex < 0 || targetIndex >= orderedVisible.length) return currentOrder;
-
-  const nextVisible = [...orderedVisible];
-  const [moving] = nextVisible.splice(currentIndex, 1);
-  nextVisible.splice(targetIndex, 0, moving);
-
-  const preservedHidden = currentOrder.filter((projectName) => !visibleNames.includes(projectName));
-  return [...nextVisible, ...preservedHidden];
-}
-
-function getHistoryDateGroups(tasks: Task[]) {
-  const map = new Map<string, Task[]>();
-  tasks.forEach((task) => {
-    const key = getDateKey(task.updated_at) || 'unknown';
-    const list = map.get(key) || [];
-    list.push(task);
-    map.set(key, list);
-  });
-
-  return Array.from(map.entries())
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([key, list]) => ({
-      key,
-      title: key === 'unknown' ? '更早之前' : formatDateLabel(key),
-      tasks: sortTasksByUpdated(list),
-    }));
-}
-
-function sortKnowledgeCustomersWithPreference(
-  customers: KnowledgeFactCustomerOverview[],
-  pinnedIds: number[],
-  orderIds: number[],
-): KnowledgeFactCustomerOverview[] {
-  const pinnedMap = new Map(pinnedIds.map((id, idx) => [id, idx]));
-  const orderMap = new Map(orderIds.map((id, idx) => [id, idx]));
-
-  return [...customers].sort((a, b) => {
-    const aId = a.customer_id ?? -1;
-    const bId = b.customer_id ?? -1;
-
-    const aPinned = aId !== -1 && pinnedMap.has(aId);
-    const bPinned = bId !== -1 && pinnedMap.has(bId);
-    if (aPinned || bPinned) {
-      if (aPinned && bPinned) {
-        return (pinnedMap.get(aId) ?? 0) - (pinnedMap.get(bId) ?? 0);
-      }
-      return aPinned ? -1 : 1;
-    }
-
-    const aOrdered = aId !== -1 && orderMap.has(aId);
-    const bOrdered = bId !== -1 && orderMap.has(bId);
-    if (aOrdered || bOrdered) {
-      if (aOrdered && bOrdered) {
-        return (orderMap.get(aId) ?? 0) - (orderMap.get(bId) ?? 0);
-      }
-      return aOrdered ? -1 : 1;
-    }
-
-    const aLatest = a.latest_fact_at || '';
-    const bLatest = b.latest_fact_at || '';
-    if (aLatest !== bLatest) return bLatest.localeCompare(aLatest);
-    return a.customer_name.localeCompare(b.customer_name);
-  });
-}
-
-function makeOptimisticTask(task: Task, type: TaskActionType, payload?: { due_at?: string | null; deferred_to?: string | null; reason?: string }) {
-  const now = localNowString();
-  if (type === 'complete') {
-    return { ...task, status: 'done' as TaskStatus, completed_at: now, completion_note: payload?.reason ?? task.completion_note ?? null, canceled_at: null, updated_at: now };
-  }
-  if (type === 'reschedule') {
-    return { ...task, due_at: payload?.due_at ?? task.due_at ?? null, updated_at: now };
-  }
-  if (type === 'defer') {
-    return {
-      ...task,
-      status: 'deferred' as TaskStatus,
-      due_at: payload?.due_at ?? task.due_at ?? null,
-      deferred_to: payload?.deferred_to ?? task.deferred_to ?? null,
-      updated_at: now,
-    };
-  }
-  return {
-    ...task,
-    status: 'canceled' as TaskStatus,
-    canceled_at: now,
-    completed_at: null,
-    updated_at: now,
-  };
-}
 
 function App() {
   const initialRoute = parseRouteState();
