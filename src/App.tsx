@@ -116,6 +116,7 @@ function App() {
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projects = useAsyncData(() => api.getProjects(), [], activeTab === 'board' || editorMode !== null);
+  const projectsV2 = useAsyncData(() => api.getProjectsV2(), [], editorMode !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const knowledgePreferences = useAsyncData(() => api.getKnowledgePreferences(), [], activeTab === 'knowledge');
   const knowledgeFactOverview = useAsyncData(
@@ -249,7 +250,6 @@ function App() {
     return planData.planGroups || [];
   }, [planData]);
   const summary = todayData?.summary;
-  const projectNames = useMemo(() => (projects.data || []).map((item) => item.name).filter(Boolean), [projects.data]);
 
   return (
     <div className="app-shell">
@@ -589,7 +589,8 @@ function App() {
           onClose={() => setEditorMode(null)}
           onSubmit={() => void submitEditor()}
           busy={actionBusy === 'create' || actionBusy === 'edit'}
-          projectNames={projectNames}
+          projectsV2={projectsV2.data || []}
+          customers={customers.data || []}
         />
       )}
 

@@ -45,6 +45,7 @@ export type ReviewBatch = Schemas['ReviewBatchRead'];
 export type Customer = Schemas['CustomerRead'];
 export type Fact = Omit<Schemas['FactRead'], 'status'> & { status: FactStatus };
 export type ProjectSummary = Schemas['ProjectSummary'];
+export type ProjectV2 = Schemas['ProjectV2Read'];
 export type KnowledgeFactProjectOverview = Schemas['KnowledgeFactProjectOverview'];
 export type KnowledgeFactCustomerOverview = Schemas['KnowledgeFactCustomerOverview'];
 export type KnowledgeFactsOverview = Schemas['KnowledgeFactsOverview'];
@@ -146,6 +147,7 @@ export interface UpdateTaskPayload {
   due_at?: string | null;
   status?: TaskStatus;
   project?: string | null;
+  project_id?: number | null;
   area?: string | null;
   source_type?: TaskSourceType | null;
   tags?: string[];

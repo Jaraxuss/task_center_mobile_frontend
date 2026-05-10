@@ -6,6 +6,7 @@ export interface TaskFormState {
   title: string;
   due_at: string;
   project: string;
+  project_id: number | null;
   description: string;
   status: TaskStatus;
   recurrence_enabled: boolean;
@@ -44,6 +45,7 @@ export function makeTaskFormState(task?: Task | null): TaskFormState {
     title: task?.title || '',
     due_at: formatDateTimeInput(getTaskScheduleAt(task || undefined)),
     project: task?.project || '',
+    project_id: task?.project_id ?? null,
     description: task?.description || '',
     status: task?.status || 'todo',
     recurrence_enabled: Boolean(recurrence?.enabled),

@@ -18,6 +18,7 @@ import {
   KnowledgeFactsOverview,
   KnowledgePreferences,
   ProjectSummary,
+  ProjectV2,
   ReviewBatch,
   Task,
   TaskEvent,
@@ -443,6 +444,7 @@ export const api = {
           description: payload.description ?? null,
           due_at: payload.due_at ?? null,
           project: payload.project ?? null,
+          project_id: payload.project_id ?? null,
           tags: payload.tags ?? [],
           source: 'web',
           reminders: [],
@@ -462,6 +464,27 @@ export const api = {
           }))
         : []
     ) satisfies ProjectSummary[];
+  },
+  getProjectsV2: async () => {
+    const response = await request<any[]>('/api/projects-v2');
+    return (
+      Array.isArray(response)
+        ? response.map((p) => ({
+            id: Number(p.id),
+            name: String(p.name || ''),
+            customer_id: p.customer_id == null ? null : Number(p.customer_id),
+            project_type: String(p.project_type || 'customer'),
+            status: String(p.status || 'active'),
+            area: p.area ?? null,
+            tags: Array.isArray(p.tags) ? p.tags.map(String) : [],
+            start_at: p.start_at ?? null,
+            target_end_at: p.target_end_at ?? null,
+            actual_end_at: p.actual_end_at ?? null,
+            created_at: p.created_at || new Date().toISOString(),
+            updated_at: p.updated_at || new Date().toISOString(),
+          }))
+        : []
+    ) satisfies ProjectV2[];
   },
   getBoardPreferences: async () =>
     normalizeBoardPreferences(await request<any>('/api/preferences/board')),

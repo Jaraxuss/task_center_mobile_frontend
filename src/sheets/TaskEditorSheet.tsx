@@ -1,6 +1,7 @@
+import { useMemo } from 'react';
 import { buildRecurrencePayload, toIsoOrNull } from '../lib';
 import type { TaskFormState } from '../lib';
-import { TaskStatus } from '../types';
+import { Customer, ProjectV2, TaskStatus } from '../types';
 import { describeRecurrence, normalizeWeekdays, statusLabelMap } from '../utils';
 
 export type TaskFormMode = 'create' | 'edit';
@@ -28,7 +29,8 @@ export function TaskEditorSheet({
   onClose,
   onSubmit,
   busy,
-  projectNames,
+  projectsV2,
+  customers,
 }: {
   mode: TaskFormMode;
   draft: TaskFormState;
@@ -36,8 +38,36 @@ export function TaskEditorSheet({
   onClose: () => void;
   onSubmit: () => void;
   busy: boolean;
-  projectNames: string[];
+  projectsV2: ProjectV2[];
+  customers: Customer[];
 }) {
+  const customerMap = useMemo(() => {
+    const map = new Map<number, string>();
+    customers.forEach((c) => map.set(c.id, c.name));
+    return map;
+  }, [customers]);
+
+  const groupedProjects = useMemo(() => {
+    const activeProjects = projectsV2.filter((p) => p.status === 'active');
+    const withCustomer: Array<{ project: ProjectV2; customerName: string }> = [];
+    const withoutCustomer: ProjectV2[] = [];
+    for (const p of activeProjects) {
+      if (p.customer_id != null) {
+        const name = customerMap.get(p.customer_id);
+        if (name) withCustomer.push({ project: p, customerName: name });
+        else withoutCustomer.push(p);
+      } else {
+        withoutCustomer.push(p);
+      }
+    }
+    const byCustomer = new Map<string, ProjectV2[]>();
+    withCustomer.forEach(({ project, customerName }) => {
+      const list = byCustomer.get(customerName) || [];
+      list.push(project);
+      byCustomer.set(customerName, list);
+    });
+    return { byCustomer: [...byCustomer.entries()].sort((a, b) => a[0].localeCompare(b[0])), other: withoutCustomer };
+  }, [projectsV2, customerMap]);
   const recurrenceSummary = draft.recurrence_enabled
     ? describeRecurrence(buildRecurrencePayload(draft, toIsoOrNull(draft.due_at)))
     : '单次提醒';
@@ -89,7 +119,31 @@ export function TaskEditorSheet({
 
             <label className="editor-field">
               <span className="editor-label">项目</span>
-              <input list="project-options" value={draft.project} onChange={(event) => onChange({ ...draft, project: event.target.value })} placeholder="输入或选择项目" />
+              <select
+                value={draft.project_id != null ? String(draft.project_id) : ''}
+                onChange={(event) => {
+                  const val = event.target.value;
+                  if (!val) {
+                    onChange({ ...draft, project_id: null, project: '' });
+                    return;
+                  }
+                  const pid = Number(val);
+                  const match = projectsV2.find((p) => p.id === pid);
+                  onChange({ ...draft, project_id: pid, project: match?.name || draft.project });
+                }}
+              >
+                <option value="">未分配项目</option>
+                {groupedProjects.byCustomer.map(([customerName, projs]) => (
+                  <optgroup key={customerName} label={customerName}>
+                    {projs.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                  </optgroup>
+                ))}
+                {groupedProjects.other.length > 0 && (
+                  <optgroup label="其他">
+                    {groupedProjects.other.map((p) => <option key={p.id} value={String(p.id)}>{p.name}</option>)}
+                  </optgroup>
+                )}
+              </select>
             </label>
           </section>
 
@@ -196,11 +250,6 @@ export function TaskEditorSheet({
           </button>
         </div>
 
-        <datalist id="project-options">
-          {projectNames.map((name) => (
-            <option key={name} value={name} />
-          ))}
-        </datalist>
       </div>
     </div>
   );

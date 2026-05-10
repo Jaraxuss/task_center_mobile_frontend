@@ -453,6 +453,7 @@ export function useAppHandlers(deps: HandlerDeps) {
       description: editorDraft.description.trim() || null,
       due_at: dueAt,
       project: editorDraft.project.trim() || null,
+      project_id: editorDraft.project_id,
       status: editorDraft.status,
       recurrence: buildRecurrencePayload(editorDraft, dueAt),
     };
@@ -463,7 +464,7 @@ export function useAppHandlers(deps: HandlerDeps) {
       if (editorMode === 'create') {
         updated = await api.createTask({ ...basePayload, title });
         if (editorDraft.status !== 'todo') {
-          updated = await api.updateTask(updated.id, { status: editorDraft.status, due_at: basePayload.due_at, project: basePayload.project, description: basePayload.description });
+          updated = await api.updateTask(updated.id, { status: editorDraft.status, due_at: basePayload.due_at, project: basePayload.project, project_id: basePayload.project_id, description: basePayload.description });
         }
       } else if (selectedTask) {
         updated = await api.updateTask(selectedTask.id, basePayload);
