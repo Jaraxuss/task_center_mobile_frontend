@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { FactFormState } from '../lib';
 import { factStatusLabelMap } from '../components';
 import { Customer, Fact, FactStatus } from '../types';
@@ -29,6 +32,7 @@ export function FactEditorSheet({
   onOpenCustomerPicker: () => void;
   busy: boolean;
 }) {
+  const [mdMode, setMdMode] = useState<'preview' | 'edit'>('preview');
   const toggleValueType = (valueType: string) => {
     const active = draft.value_types.includes(valueType);
     onChange({
@@ -116,10 +120,38 @@ export function FactEditorSheet({
           </section>
 
           <section className="editor-card editor-card-soft">
-            <label className="editor-field editor-field-description">
-              <span className="editor-label">事实原文 Markdown</span>
-              <textarea rows={14} value={draft.raw_markdown} onChange={(event) => onChange({ ...draft, raw_markdown: event.target.value })} placeholder="保留客户原话、转写、证据截图描述。" />
-            </label>
+            <div className="editor-field editor-field-description">
+              <div className="editor-label-row">
+                <span className="editor-label">事实原文 Markdown</span>
+                <div className="markdown-mode-toggle">
+                  <button
+                    type="button"
+                    className={mdMode === 'preview' ? 'toggle-btn toggle-btn-active' : 'toggle-btn'}
+                    onClick={() => setMdMode('preview')}
+                  >
+                    预览
+                  </button>
+                  <button
+                    type="button"
+                    className={mdMode === 'edit' ? 'toggle-btn toggle-btn-active' : 'toggle-btn'}
+                    onClick={() => setMdMode('edit')}
+                  >
+                    编辑
+                  </button>
+                </div>
+              </div>
+              {mdMode === 'edit' ? (
+                <textarea rows={14} value={draft.raw_markdown} onChange={(event) => onChange({ ...draft, raw_markdown: event.target.value })} placeholder="保留客户原话、转写、证据截图描述。" />
+              ) : (
+                <div className="markdown-body">
+                  {draft.raw_markdown ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.raw_markdown}</ReactMarkdown>
+                  ) : (
+                    <p className="markdown-empty">暂无正文</p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
