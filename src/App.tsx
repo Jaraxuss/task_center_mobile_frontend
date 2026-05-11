@@ -28,6 +28,7 @@ import { StateCard } from './components';
 import {
   FactCustomerPickerSheet,
   FactEditorSheet,
+  FactProjectPickerSheet,
   HistoryFilterSheet,
   MaterialEditorSheet,
   SettingsSheet,
@@ -98,6 +99,7 @@ function App() {
   const [factStatusFilter, setFactStatusFilter] = useState<FactStatus | ''>('');
   const [factSheetOverTask, setFactSheetOverTask] = useState(false);
   const [factCustomerPickerOpen, setFactCustomerPickerOpen] = useState(false);
+  const [factProjectPickerOpen, setFactProjectPickerOpen] = useState(false);
   const [materialFactsLoading, setMaterialFactsLoading] = useState(false);
   const [materialFactIds, setMaterialFactIds] = useState<number[]>([]);
   const [materialLinkedFacts, setMaterialLinkedFacts] = useState<Fact[]>([]);
@@ -116,7 +118,7 @@ function App() {
   const board = useAsyncData(() => api.getBoardDashboard(), [], activeTab === 'board');
   const allTasks = useAsyncData(() => api.getTasks(), [], activeTab === 'board');
   const projectSummaries = useAsyncData(() => api.getProjectSummaries(), [], activeTab === 'board');
-  const projects = useAsyncData(() => api.getProjects(), [], editorMode !== null || materialDraft !== null);
+  const projects = useAsyncData(() => api.getProjects(), [], editorMode !== null || materialDraft !== null || factDraft !== null);
   const boardPreferences = useAsyncData(() => api.getBoardPreferences(), [], activeTab === 'board');
   const knowledgePreferences = useAsyncData(() => api.getKnowledgePreferences(), [], activeTab === 'knowledge');
   const knowledgeFactOverview = useAsyncData(
@@ -218,7 +220,7 @@ function App() {
     openTask, runTaskAction, submitEditor, submitMaterialEditor,
     updateMaterialStatus, archiveMaterial, openMaterialDraft,
     submitFactEditor, updateFactStatusById, deleteFactById,
-    updateFactCustomerById, openFactById,
+    updateFactCustomerById, updateFactProjectById, openFactById,
     handleMoveProjectGroup, handleTogglePinnedProject,
     handleTogglePinnedKnowledgeCustomer, handleMoveKnowledgeCustomer,
     loadProjectFacts,
@@ -234,7 +236,7 @@ function App() {
     materialDraft, setMaterialDraft,
     factDraft, setFactDraft,
     factStatusFilter,
-    setFactSheetOverTask, setFactCustomerPickerOpen,
+    setFactSheetOverTask, setFactCustomerPickerOpen, setFactProjectPickerOpen,
     currentFact, setCurrentFact,
     boardPreferenceData, knowledgePrefData,
     boardProjectGroups, filteredOverviewCustomers,
@@ -633,17 +635,22 @@ function App() {
           ?? (taskFacts.data || []).find((f: Fact) => f.id === factDraft.id)
           ?? null;
         const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
+        const project = fact?.project_id != null
+          ? (projects.data || []).find((p) => p.id === fact.project_id) ?? null
+          : null;
         return (
           <FactEditorSheet
             draft={factDraft}
             fact={fact}
             customer={customer}
+            project={project}
             onChange={(next) => setFactDraft(next)}
             onClose={() => {
               setFactDraft(null);
               setCurrentFact(null);
               setFactSheetOverTask(false);
               setFactCustomerPickerOpen(false);
+              setFactProjectPickerOpen(false);
             }}
             onSubmit={() => void submitFactEditor()}
             onStatusChange={(status) => void updateFactStatusById(factDraft.id, status)}
@@ -658,6 +665,7 @@ function App() {
                 .finally(() => setDetailLoading(false));
             }}
             onOpenCustomerPicker={() => setFactCustomerPickerOpen(true)}
+            onOpenProjectPicker={() => setFactProjectPickerOpen(true)}
             busy={actionBusy === 'fact' || actionBusy === `fact-${factDraft.id}`}
           />
         );
@@ -677,6 +685,29 @@ function App() {
           }}
         />
       )}
+
+      {factDraft && factProjectPickerOpen && (() => {
+        const fact = currentFact
+          ?? (taskFacts.data || []).find((f: Fact) => f.id === factDraft.id)
+          ?? null;
+        const customer = fact?.customer_id != null ? customerMap.get(fact.customer_id) ?? null : null;
+        const customerProjects = customer
+          ? (projects.data || []).filter((p) => p.customer_id === customer.id)
+          : [];
+        return (
+          <FactProjectPickerSheet
+            projects={customerProjects}
+            currentProjectId={fact?.project_id ?? null}
+            customerName={customer?.name ?? null}
+            busy={actionBusy === `fact-${factDraft.id}`}
+            onClose={() => setFactProjectPickerOpen(false)}
+            onSelect={async (projectId) => {
+              await updateFactProjectById(factDraft.id, projectId);
+              setFactProjectPickerOpen(false);
+            }}
+          />
+        );
+      })()}
 
       {toast && <div className={toast.tone === 'danger' ? 'toast toast-danger' : toast.tone === 'success' ? 'toast toast-success' : 'toast'}>{toast.text}</div>}
     </div>

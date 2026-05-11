@@ -39,6 +39,7 @@ import {
   HistoryResponse,
   KnowledgeFactCustomerOverview,
   KnowledgePreferences,
+  Project,
   Task,
   UpdateCustomerMaterialPayload,
   UpdateFactPayload,
@@ -217,6 +218,7 @@ export interface HandlerDeps {
   factStatusFilter: FactStatus | '';
   setFactSheetOverTask: (v: boolean) => void;
   setFactCustomerPickerOpen: (v: boolean) => void;
+  setFactProjectPickerOpen: (v: boolean) => void;
   currentFact: Fact | null;
   setCurrentFact: (f: Fact | null) => void;
 
@@ -247,7 +249,7 @@ export function useAppHandlers(deps: HandlerDeps) {
     materialDraft, setMaterialDraft,
     factDraft, setFactDraft,
     factStatusFilter,
-    setFactSheetOverTask, setFactCustomerPickerOpen,
+    setFactSheetOverTask, setFactCustomerPickerOpen, setFactProjectPickerOpen,
     currentFact, setCurrentFact,
     boardPreferenceData, knowledgePrefData,
     boardProjectGroups, filteredOverviewCustomers,
@@ -637,13 +639,27 @@ export function useAppHandlers(deps: HandlerDeps) {
   async function updateFactCustomerById(factId: number, customerId: number | null) {
     setActionBusy(`fact-${factId}`);
     try {
+      const projectList = (projects.data || []) as Project[];
+      const currentProjectId = currentFact?.project_id ?? null;
+      const currentProject = currentProjectId != null
+        ? projectList.find((p) => p.id === currentProjectId) ?? null
+        : null;
+      const projectMismatch = currentProjectId != null
+        && (customerId == null || (currentProject != null && currentProject.customer_id !== customerId));
+
       const payload: UpdateFactPayload = customerId == null
         ? { clear_customer: true }
         : { customer_id: customerId };
+      if (projectMismatch) payload.clear_project = true;
+
       const updated = await api.updateFact(factId, payload);
       setCurrentFact(updated);
       setFactDraft((prev) => (prev && prev.id === factId ? prev : prev));
-      setToast({ text: '客户已更新', tone: 'success' });
+      setKnowledgeProjectFacts({});
+      setToast({
+        text: projectMismatch ? '客户已更新，项目已自动清空' : '客户已更新',
+        tone: 'success',
+      });
       await Promise.all([
         knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
@@ -651,6 +667,29 @@ export function useAppHandlers(deps: HandlerDeps) {
       return updated;
     } catch (error) {
       setToast({ text: error instanceof Error ? error.message : '客户更新失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+    return null;
+  }
+
+  async function updateFactProjectById(factId: number, projectId: number | null) {
+    setActionBusy(`fact-${factId}`);
+    try {
+      const payload: UpdateFactPayload = projectId == null
+        ? { clear_project: true }
+        : { project_id: projectId };
+      const updated = await api.updateFact(factId, payload);
+      setCurrentFact(updated);
+      setKnowledgeProjectFacts({});
+      setToast({ text: '项目已更新', tone: 'success' });
+      await Promise.all([
+        knowledgeFactOverview.refresh().catch(() => undefined),
+        taskFacts.refresh().catch(() => undefined),
+      ]);
+      return updated;
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '项目更新失败', tone: 'danger' });
     } finally {
       setActionBusy(null);
     }
@@ -678,6 +717,7 @@ export function useAppHandlers(deps: HandlerDeps) {
     updateFactStatusById,
     deleteFactById,
     updateFactCustomerById,
+    updateFactProjectById,
     openFactById,
     handleMoveProjectGroup,
     handleTogglePinnedProject,

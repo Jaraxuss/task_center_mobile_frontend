@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { FactFormState } from '../lib';
 import { factStatusLabelMap } from '../components';
-import { Customer, Fact, FactStatus } from '../types';
+import { Customer, Fact, FactStatus, Project } from '../types';
 
 const factValueTypeOptions = ['客户需求', '业务流程', '系统限制', '关键人信息', '客户偏好', '风险/阻塞', '解决方案', '商机/增购/续费', '售后问题', '可复用方法论'];
 
@@ -11,6 +11,7 @@ export function FactEditorSheet({
   draft,
   fact,
   customer,
+  project,
   onChange,
   onClose,
   onSubmit,
@@ -18,11 +19,13 @@ export function FactEditorSheet({
   onDelete,
   onOpenTask,
   onOpenCustomerPicker,
+  onOpenProjectPicker,
   busy,
 }: {
   draft: FactFormState;
   fact: Fact | null;
   customer: Customer | null;
+  project: Project | null;
   onChange: (value: FactFormState) => void;
   onClose: () => void;
   onSubmit: () => void;
@@ -30,6 +33,7 @@ export function FactEditorSheet({
   onDelete: () => void;
   onOpenTask: (taskId: number) => void;
   onOpenCustomerPicker: () => void;
+  onOpenProjectPicker: () => void;
   busy: boolean;
 }) {
   const [mdMode, setMdMode] = useState<'preview' | 'edit'>('preview');
@@ -72,6 +76,21 @@ export function FactEditorSheet({
                   aria-label="修改关联客户"
                 >
                   <span className="editor-pickable-value">{customer?.name || '— 选择客户'}</span>
+                  <span className="editor-pickable-glyph" aria-hidden="true">›</span>
+                </button>
+              </div>
+              <div className="editor-field">
+                <span className="editor-label">项目</span>
+                <button
+                  type="button"
+                  className="editor-readonly editor-pickable"
+                  onClick={onOpenProjectPicker}
+                  disabled={busy || customer == null}
+                  aria-label="修改关联项目"
+                >
+                  <span className="editor-pickable-value">
+                    {customer == null ? '— 请先选择客户' : (project?.name || '— 未归项目')}
+                  </span>
                   <span className="editor-pickable-glyph" aria-hidden="true">›</span>
                 </button>
               </div>
