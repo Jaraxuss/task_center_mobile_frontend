@@ -128,7 +128,7 @@ export function TaskEditorSheet({
                     return;
                   }
                   const pid = Number(val);
-                  const match = projectsV2.find((p) => p.id === pid);
+                  const match = projects.find((p: { id: number }) => p.id === pid);
                   onChange({ ...draft, project_id: pid, project: match?.name || draft.project });
                 }}
               >
