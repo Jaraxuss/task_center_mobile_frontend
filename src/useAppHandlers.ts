@@ -303,9 +303,8 @@ export function useAppHandlers(deps: HandlerDeps) {
     const jobs: Array<Promise<unknown>> = [];
     if (activeTab === 'today') jobs.push(today.refresh());
     if (activeTab === 'plan') jobs.push(plan.refresh());
-    if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh());
-    if (activeTab === 'knowledge' && knowledgeMode === 'materials') jobs.push(customerMaterials.refresh(), reviewBatches.refresh(), customers.refresh());
-    if (activeTab === 'knowledge' && knowledgeMode === 'facts') jobs.push(knowledgeFactOverview.refresh(), knowledgePreferences.refresh(), customers.refresh());
+    if (activeTab === 'board') jobs.push(board.refresh(), allTasks.refresh(), projects.refresh(), boardPreferences.refresh(), customers.refresh());
+    if (activeTab === 'knowledge') jobs.push(customerMaterials.refresh(), reviewBatches.refresh(), customers.refresh(), knowledgeFactOverview.refresh(), knowledgePreferences.refresh());
     if (activeTab === 'history') jobs.push(history.refresh());
     await Promise.all(jobs);
   }
@@ -587,6 +586,7 @@ export function useAppHandlers(deps: HandlerDeps) {
       setCurrentFact(null);
       setFactSheetOverTask(false);
       setToast({ text: '事实已保存', tone: 'success' });
+      setKnowledgeProjectFacts({});
       await Promise.all([
         knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
@@ -605,6 +605,7 @@ export function useAppHandlers(deps: HandlerDeps) {
       setCurrentFact(updated);
       setFactDraft((prev) => (prev && prev.id === factId ? { ...prev, status } : prev));
       setToast({ text: `事实已标为${factStatusLabelMap[status]}`, tone: 'success' });
+      setKnowledgeProjectFacts({});
       await Promise.all([
         knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),
@@ -625,6 +626,7 @@ export function useAppHandlers(deps: HandlerDeps) {
       setCurrentFact(null);
       setFactSheetOverTask(false);
       setToast({ text: '事实已删除', tone: 'success' });
+      setKnowledgeProjectFacts({});
       await Promise.all([
         knowledgeFactOverview.refresh().catch(() => undefined),
         taskFacts.refresh().catch(() => undefined),

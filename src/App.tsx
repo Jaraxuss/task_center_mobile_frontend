@@ -54,7 +54,7 @@ import {
 } from './views';
 import { useAppHandlers, useAppSideEffects } from './useAppHandlers';
 import { BoardPreferences, Customer, CustomerMaterialStatus, DashboardBoardGroup, Fact, FactStatus, KnowledgeFactsOverview, KnowledgePreferences, PlanGroup, Task, TaskStatus } from './types';
-import { TimeFormatMode, groupTasksByProject, groupTodayTasks, sortTasksByUpdated } from './utils';
+import { TimeFormatMode, groupTasksByCustomer, groupTodayTasks, sortTasksByUpdated } from './utils';
 
 const tabs: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: 'today', label: '今日', icon: '◉' },
@@ -129,17 +129,17 @@ function App() {
   const customerMaterials = useAsyncData(
     () => api.getCustomerMaterials({ limit: 300 }),
     [],
-    activeTab === 'knowledge' && knowledgeMode === 'materials',
+    activeTab === 'knowledge',
   );
   const reviewBatches = useAsyncData(
     () => api.getReviewBatches(),
     [],
-    activeTab === 'knowledge' && knowledgeMode === 'materials',
+    activeTab === 'knowledge',
   );
   const customers = useAsyncData(
     () => api.getCustomers(),
     [],
-    activeTab === 'knowledge' || factDraft !== null,
+    activeTab === 'knowledge' || activeTab === 'board' || factDraft !== null,
   );
   const taskMaterials = useAsyncData(
     () => (selectedTask ? api.getTaskCustomerMaterials(selectedTask.id) : Promise.resolve([])),
@@ -164,9 +164,14 @@ function App() {
   );
   const orderedBoardTasks = useMemo(() => sortTasksWithPreference(allTasks.data || [], boardPreferenceData.task_order), [allTasks.data, boardPreferenceData.task_order]);
   const boardStatusGroups = orderedBoardStatusGroups;
+  const customerMap = useMemo(() => {
+    const map = new Map<number, Customer>();
+    (customers.data || []).forEach((c) => map.set(c.id, c));
+    return map;
+  }, [customers.data]);
   const boardProjectGroups = useMemo(
-    () => sortProjectGroupsWithPreference(groupTasksByProject(orderedBoardTasks), boardPreferenceData.pinned_projects, boardPreferenceData.project_order),
-    [orderedBoardTasks, boardPreferenceData.pinned_projects, boardPreferenceData.project_order],
+    () => sortProjectGroupsWithPreference(groupTasksByCustomer(orderedBoardTasks, customerMap), boardPreferenceData.pinned_projects, boardPreferenceData.project_order),
+    [orderedBoardTasks, customerMap, boardPreferenceData.pinned_projects, boardPreferenceData.project_order],
   );
   const filteredProjectGroups = useMemo(() => {
     const query = boardProjectQuery.trim().toLowerCase();
@@ -194,11 +199,6 @@ function App() {
     }
     return sortKnowledgeCustomersWithPreference(list, knowledgePrefData.pinned_customer_ids, knowledgePrefData.customer_order_ids);
   }, [overviewData.customers, knowledgeCustomerQuery, knowledgePrefData]);
-  const customerMap = useMemo(() => {
-    const map = new Map<number, Customer>();
-    (customers.data || []).forEach((c) => map.set(c.id, c));
-    return map;
-  }, [customers.data]);
   const historyDateGroups = useMemo(() => getHistoryDateGroups(historyItems), [historyItems]);
   const visibleHistoryGroups = useMemo(() => historyDateGroups.slice(0, visibleHistoryGroupCount), [historyDateGroups, visibleHistoryGroupCount]);
   const hasMoreHistoryGroups = visibleHistoryGroupCount < historyDateGroups.length;
@@ -317,7 +317,7 @@ function App() {
             />
             {((boardMode === 'status' && board.loading && !board.loaded) || (boardMode === 'project' && allTasks.loading && !allTasks.loaded)) && <StateCard text="看板加载中…" />}
             {(board.error || allTasks.error || boardPreferences.error) && <StateCard text={board.error || allTasks.error || boardPreferences.error || '加载失败'} tone="danger" />}
-            {!board.error && !allTasks.error && !boardPreferences.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text={boardMode === 'project' && boardProjectQuery ? '没有匹配的客户 / 项目' : '当前没有可展示的任务'} />}
+            {!board.error && !allTasks.error && !boardPreferences.error && board.loaded && allTasks.loaded && boardGroups.length === 0 && <StateCard text={boardMode === 'project' && boardProjectQuery ? '没有匹配的客户' : '当前没有可展示的任务'} />}
             {!board.error && !allTasks.error && boardGroups.map((group: DashboardBoardGroup | { key: string; title: string; tasks: Task[] }) => (
               <BoardGroupItem
                 key={group.key}

@@ -1,4 +1,4 @@
-import { PlanGroup, Task, TaskRecurrence, TaskStatus } from './types';
+import { Customer, PlanGroup, Task, TaskRecurrence, TaskStatus } from './types';
 
 export const APP_TIME_ZONE = 'Asia/Shanghai';
 
@@ -195,6 +195,25 @@ export function groupTasksByProject(tasks: Task[]) {
   const groups = new Map<string, Task[]>();
   tasks.forEach((task) => {
     const key = task.project?.trim() || '未分项目';
+    const list = groups.get(key) || [];
+    list.push(task);
+    groups.set(key, list);
+  });
+
+  return Array.from(groups.entries())
+    .sort(([a], [b]) => a.localeCompare(b, 'zh-CN'))
+    .map(([title, list]) => ({
+      key: title,
+      title,
+      tasks: sortTasksByDue(list),
+    }));
+}
+
+export function groupTasksByCustomer(tasks: Task[], customerMap: Map<number, Customer>) {
+  const groups = new Map<string, Task[]>();
+  tasks.forEach((task) => {
+    const customer = task.customer_id != null ? customerMap.get(task.customer_id) : null;
+    const key = customer ? customer.name : '未分客户';
     const list = groups.get(key) || [];
     list.push(task);
     groups.set(key, list);
