@@ -2326,6 +2326,8 @@ button {
 }
 
 :root[data-theme='dark'] .board-segment {
+  background: rgba(20, 26, 40, 0.92);
+  border-color: var(--line);
   color: var(--muted-strong);
 }
 
@@ -2407,6 +2409,21 @@ button {
 
 :root[data-theme='dark'] .overlay {
   background: rgba(2, 6, 14, 0.64);
+}
+
+:root[data-theme='dark'] .markdown-body {
+  background: rgba(12, 17, 28, 0.96);
+  border-color: var(--line);
+}
+
+:root[data-theme='dark'] .markdown-mode-toggle {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+:root[data-theme='dark'] .toggle-btn-active {
+  background: rgba(30, 38, 58, 0.98);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 :root[data-theme='dark'] .nav-item-active {
