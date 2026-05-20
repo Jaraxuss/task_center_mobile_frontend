@@ -19,6 +19,7 @@ import {
   KnowledgePreferences,
   ProjectSummary,
   Project,
+  ReminderPayload,
   ReviewBatch,
   Task,
   TaskEvent,
@@ -27,6 +28,7 @@ import {
   TaskStatus,
   UpdateCustomerMaterialPayload,
   UpdateFactPayload,
+  UpdateReminderPayload,
   UpdateTaskPayload,
 } from './types';
 import { currentDateKey, getDateKey, toDateMillis } from './utils';
@@ -175,7 +177,21 @@ function normalizeTask(task: any): Task {
     canceled_at: task.canceled_at ?? null,
     deferred_to: task.deferred_to ?? null,
     reminders: Array.isArray(task.reminders)
-      ? task.reminders.map((reminder: any) => ({ ...reminder, id: Number(reminder.id), task_id: Number(reminder.task_id) }))
+      ? task.reminders.map((reminder: any) => ({
+          ...reminder,
+          id: Number(reminder.id),
+          task_id: Number(reminder.task_id),
+          retry_count: Number(reminder.retry_count || 0),
+          delivery_mode: reminder.delivery_mode ?? null,
+          receive_id: reminder.receive_id ?? null,
+          receive_id_type: reminder.receive_id_type ?? null,
+          external_cron_job_id: reminder.external_cron_job_id ?? null,
+          message_id: reminder.message_id ?? null,
+          request_uuid: reminder.request_uuid ?? null,
+          fired_at: reminder.fired_at ?? null,
+          last_error: reminder.last_error ?? null,
+          ai_prompt: reminder.ai_prompt ?? null,
+        }))
       : [],
     recurrence: normalizeRecurrence(task),
     events: Array.isArray(task.events) ? task.events.map(normalizeEvent) : [],
@@ -495,6 +511,20 @@ export const api = {
           ...payload,
           recurrence: serializeRecurrencePayload(payload.recurrence),
         }),
+      }),
+    ),
+  createReminder: async (taskId: number, payload: ReminderPayload) =>
+    normalizeTask(
+      await request<any>(`/api/tasks/${taskId}/reminders`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      }),
+    ),
+  updateReminder: async (taskId: number, reminderId: number, payload: UpdateReminderPayload) =>
+    normalizeTask(
+      await request<any>(`/api/tasks/${taskId}/reminders/${reminderId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
       }),
     ),
   completeTask: async (id: number, payload?: CompleteTaskPayload) =>

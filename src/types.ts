@@ -22,9 +22,24 @@ export type RecurrenceFrequency = Schemas['TaskRecurrenceRead']['frequency'];
 export type CustomerMaterialStatus = 'pending' | 'approved' | 'skipped' | 'uploaded';
 export type ReviewBatchStatus = 'pending' | 'partial' | 'approved' | 'uploaded' | string;
 export type FactStatus = 'draft' | 'confirmed' | 'rejected';
+export type ReminderDeliveryMode = 'feishu_card_v2' | 'feishu_card_v1' | 'openclaw_cron_agent';
+export type ReminderStatus = 'scheduled' | 'fired' | 'canceled' | 'failed' | 'disabled';
+export type ReminderReceiveIdType = 'open_id' | 'user_id' | 'union_id' | 'email' | 'chat_id';
 
 // --- Read models (backend → frontend) -------------------------------------
-export type Reminder = Schemas['ReminderRead'];
+export type Reminder = Schemas['ReminderRead'] & {
+  delivery_mode?: ReminderDeliveryMode | null;
+  receive_id?: string | null;
+  receive_id_type?: ReminderReceiveIdType | null;
+  external_cron_job_id?: string | null;
+  message_id?: string | null;
+  request_uuid?: string | null;
+  fired_at?: string | null;
+  last_error?: string | null;
+  retry_count?: number;
+  ai_prompt?: string | null;
+  status: ReminderStatus | string;
+};
 export type TaskRecurrenceRead = Schemas['TaskRecurrenceRead'];
 export type TaskRecurrence = Schemas['TaskRecurrenceWrite'] & {
   id?: number;
@@ -35,9 +50,10 @@ export type TaskRecurrence = Schemas['TaskRecurrenceWrite'] & {
   updated_at?: string;
 };
 export type TaskEvent = Schemas['TaskEventRead'];
-export type Task = Omit<Schemas['TaskDetail'], 'status' | 'recurrence'> & {
+export type Task = Omit<Schemas['TaskDetail'], 'status' | 'recurrence' | 'reminders'> & {
   status: TaskStatus;
   recurrence?: TaskRecurrence | null;
+  reminders: Reminder[];
 };
 export type CustomerMaterial = Omit<Schemas['CustomerMaterialRead'], 'status' | 'project' | 'source_type' | 'source' | 'source_refs' | 'value_types' | 'task_id'> & { status: CustomerMaterialStatus };
 export type CustomerMaterialFact = Schemas['CustomerMaterialFactRead'];
@@ -149,6 +165,26 @@ export interface UpdateTaskPayload {
   source_type?: TaskSourceType | null;
   tags?: string[];
   recurrence?: TaskRecurrence | null;
+}
+
+export interface ReminderPayload {
+  remind_at: string;
+  channel?: string;
+  note?: string | null;
+  delivery_mode?: ReminderDeliveryMode | null;
+  receive_id?: string | null;
+  receive_id_type?: ReminderReceiveIdType | null;
+  ai_prompt?: string | null;
+}
+
+export interface UpdateReminderPayload {
+  remind_at?: string;
+  channel?: string | null;
+  note?: string | null;
+  delivery_mode?: ReminderDeliveryMode | null;
+  receive_id?: string | null;
+  receive_id_type?: ReminderReceiveIdType | null;
+  ai_prompt?: string | null;
 }
 
 export interface CompleteTaskPayload {

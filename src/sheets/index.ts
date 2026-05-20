@@ -3,6 +3,7 @@ export { FactEditorSheet } from './FactEditorSheet';
 export { FactProjectPickerSheet } from './FactProjectPickerSheet';
 export { HistoryFilterSheet } from './HistoryFilterSheet';
 export { MaterialEditorSheet } from './MaterialEditorSheet';
+export { ReminderSettingsSheet } from './ReminderSettingsSheet';
 export { SettingsSheet, type ThemeMode } from './SettingsSheet';
 export { TaskActionSheet, type ActionSheetState } from './TaskActionSheet';
 export { TaskDetailSheet } from './TaskDetailSheet';

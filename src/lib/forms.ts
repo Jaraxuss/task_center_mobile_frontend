@@ -1,4 +1,4 @@
-import { CustomerMaterial, CustomerMaterialStatus, Fact, FactStatus, Task, TaskRecurrence, TaskStatus } from '../types';
+import { CustomerMaterial, CustomerMaterialStatus, Fact, FactStatus, Reminder, ReminderDeliveryMode, ReminderReceiveIdType, Task, TaskRecurrence, TaskStatus } from '../types';
 import { APP_TIME_ZONE, normalizeWeekdays } from '../utils';
 import { formatDateTimeInput, toIsoOrNull } from './format';
 
@@ -15,6 +15,16 @@ export interface TaskFormState {
   recurrence_weekdays: number[];
   recurrence_month_day: string;
   recurrence_until: string;
+}
+
+export interface ReminderFormState {
+  id: number | null;
+  remind_at: string;
+  delivery_mode: ReminderDeliveryMode;
+  receive_id: string;
+  receive_id_type: ReminderReceiveIdType;
+  note: string;
+  ai_prompt: string;
 }
 
 export interface MaterialFormState {
@@ -54,6 +64,45 @@ export function makeTaskFormState(task?: Task | null): TaskFormState {
     recurrence_weekdays: normalizeWeekdays(recurrence?.days_of_week),
     recurrence_month_day: recurrence?.day_of_month ? String(recurrence.day_of_month) : '',
     recurrence_until: formatDateTimeInput(recurrence?.end_at || ''),
+  };
+}
+
+export function getPrimaryReminder(task?: Task | null): Reminder | null {
+  const reminders = [...(task?.reminders || [])].filter((reminder) => reminder.status !== 'canceled');
+  if (!reminders.length) return null;
+  return reminders.sort((a, b) => String(a.remind_at).localeCompare(String(b.remind_at)))[0];
+}
+
+export function buildDefaultAiPrompt(task: Task, remindAt: string): string {
+  const lines = [
+    '你是 TaskCenter 定时提醒助手。',
+    '',
+    '请在到点后发送一条简洁中文提醒给南哥。不要扩写，不要引入额外事实。',
+    '',
+    '任务信息：',
+    `- task_center #${task.id}`,
+    `- 标题：${task.title}`,
+    `- 计划时间：${remindAt || '未设置'}`,
+    `- 状态：${task.status}`,
+  ];
+  if (task.project) lines.push(`- 项目：${task.project}`);
+  if (task.description) lines.push(`- 备注：${task.description}`);
+  lines.push('', '请输出一条适合飞书发送的提醒。');
+  return lines.join('\n');
+}
+
+export function makeReminderFormState(task: Task): ReminderFormState {
+  const reminder = getPrimaryReminder(task);
+  const remindAt = formatDateTimeInput(reminder?.remind_at || getTaskScheduleAt(task) || '');
+  const mode = (reminder?.delivery_mode || 'feishu_card_v2') as ReminderDeliveryMode;
+  return {
+    id: reminder?.id ?? null,
+    remind_at: remindAt,
+    delivery_mode: mode,
+    receive_id: reminder?.receive_id || '',
+    receive_id_type: (reminder?.receive_id_type || 'open_id') as ReminderReceiveIdType,
+    note: reminder?.note || '',
+    ai_prompt: reminder?.ai_prompt || buildDefaultAiPrompt(task, remindAt),
   };
 }
 

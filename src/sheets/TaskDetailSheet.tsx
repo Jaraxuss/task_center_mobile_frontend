@@ -4,6 +4,12 @@ import { CompactFactRow, DetailItem, MaterialRow, StatusPill } from '../componen
 import { Customer, CustomerMaterial, Fact, Task } from '../types';
 import { describeRecurrence, describeRecurrenceMeta, formatDateTime, statusLabelMap } from '../utils';
 
+const reminderModeLabel: Record<string, string> = {
+  feishu_card_v2: '飞书卡片 V2',
+  feishu_card_v1: '飞书卡片 V1',
+  openclaw_cron_agent: 'AI 提醒',
+};
+
 function getLatestFollowupResult(task: Task) {
   if (task.completion_note?.trim()) return task.completion_note.trim();
   const events = task.events || [];
@@ -27,6 +33,7 @@ export function TaskDetailSheet({
   onClose,
   onAction,
   onEdit,
+  onReminderSettings,
   onEditMaterial,
   onOpenFact,
 }: {
@@ -41,10 +48,13 @@ export function TaskDetailSheet({
   onClose: () => void;
   onAction: (type: TaskActionType) => void;
   onEdit: () => void;
+  onReminderSettings: () => void;
   onEditMaterial: (material: CustomerMaterial) => void;
   onOpenFact: (factId: number) => void;
 }) {
   const latestFollowupResult = getLatestFollowupResult(task);
+  const primaryReminder = [...(task.reminders || [])].filter((reminder) => reminder.status !== 'canceled').sort((a, b) => String(a.remind_at).localeCompare(String(b.remind_at)))[0] || null;
+  const reminderMode = primaryReminder?.delivery_mode || 'feishu_card_v2';
 
   return (
     <div className="overlay">
@@ -80,6 +90,17 @@ export function TaskDetailSheet({
               <div className="detail-label">描述</div>
               <p>{task.description || '暂无描述'}</p>
             </div>
+          </div>
+
+          <div className="detail-card reminder-summary-card">
+            <div className="detail-label">提醒</div>
+            <button type="button" className="reminder-summary-button" onClick={onReminderSettings}>
+              <div>
+                <strong>{primaryReminder ? formatDateTime(primaryReminder.remind_at) : '未设置提醒'}</strong>
+                <span>{primaryReminder ? `${reminderModeLabel[reminderMode] || reminderMode} · ${primaryReminder.status}` : '点击设置飞书卡片或 AI 提醒'}</span>
+              </div>
+              <span className="reminder-summary-arrow">设置</span>
+            </button>
           </div>
 
           <div className="detail-card">

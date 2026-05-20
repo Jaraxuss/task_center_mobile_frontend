@@ -8,6 +8,7 @@ import {
   getHistoryDateGroups,
   groupMaterialsByBatch,
   makeFactFormState,
+  makeReminderFormState,
   makeTaskFormState,
   parseRouteState,
   sortKnowledgeCustomersWithPreference,
@@ -21,6 +22,7 @@ import type {
   FactFormState,
   KnowledgeMode,
   MaterialFormState,
+  ReminderFormState,
   TabKey,
   TaskFormState,
 } from './lib';
@@ -31,6 +33,7 @@ import {
   FactProjectPickerSheet,
   HistoryFilterSheet,
   MaterialEditorSheet,
+  ReminderSettingsSheet,
   SettingsSheet,
   TaskActionSheet,
   TaskDetailSheet,
@@ -92,6 +95,7 @@ function App() {
   const [actionSheet, setActionSheet] = useState<ActionSheetState | null>(null);
   const [editorMode, setEditorMode] = useState<TaskFormMode | null>(null);
   const [editorDraft, setEditorDraft] = useState<TaskFormState>(makeTaskFormState());
+  const [reminderDraft, setReminderDraft] = useState<ReminderFormState | null>(null);
   const [materialDraft, setMaterialDraft] = useState<MaterialFormState | null>(null);
   const [materialStatusFilter, setMaterialStatusFilter] = useState<CustomerMaterialStatus | ''>('');
   const [knowledgeMode, setKnowledgeMode] = useState<KnowledgeMode>(initialRoute.knowledgeMode);
@@ -218,6 +222,7 @@ function App() {
 
   const {
     openTask, runTaskAction, submitEditor, submitMaterialEditor,
+    submitReminderSettings,
     updateMaterialStatus, archiveMaterial, openMaterialDraft,
     submitFactEditor, updateFactStatusById, deleteFactById,
     updateFactCustomerById, updateFactProjectById, openFactById,
@@ -237,6 +242,7 @@ function App() {
     factDraft, setFactDraft,
     factStatusFilter,
     setFactSheetOverTask, setFactCustomerPickerOpen, setFactProjectPickerOpen,
+    setReminderDraft,
     currentFact, setCurrentFact,
     boardPreferenceData, knowledgePrefData,
     boardProjectGroups, filteredOverviewCustomers,
@@ -510,6 +516,7 @@ function App() {
             setEditorDraft(makeTaskFormState(selectedTask));
             setEditorMode('edit');
           }}
+          onReminderSettings={() => setReminderDraft(makeReminderFormState(selectedTask))}
           onEditMaterial={openMaterialDraft}
           onOpenFact={(factId) => {
             setFactSheetOverTask(true);
@@ -550,6 +557,17 @@ function App() {
             }
             void runTaskAction('cancel', { reason: actionSheet.reason.trim() || undefined });
           }}
+        />
+      )}
+
+      {reminderDraft && selectedTask && (
+        <ReminderSettingsSheet
+          task={selectedTask}
+          draft={reminderDraft}
+          busy={actionBusy === 'reminder'}
+          onChange={setReminderDraft}
+          onClose={() => setReminderDraft(null)}
+          onSubmit={() => void submitReminderSettings(reminderDraft)}
         />
       )}
 
@@ -716,4 +734,3 @@ function App() {
 
 
 export default App;
-

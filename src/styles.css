@@ -1232,6 +1232,43 @@ button {
   grid-column: 1 / -1;
 }
 
+.reminder-summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reminder-summary-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  border: 1px solid rgba(220, 226, 239, 0.96);
+  border-radius: 18px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(248, 250, 255, 0.98), rgba(255, 255, 255, 0.98));
+  color: var(--text);
+  text-align: left;
+}
+
+.reminder-summary-button div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.reminder-summary-button span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reminder-summary-arrow {
+  flex-shrink: 0;
+  color: var(--brand) !important;
+  font-weight: 800;
+}
+
 .action-button,
 .primary-submit {
   padding: 14px 16px;
@@ -1484,6 +1521,60 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.reminder-sheet {
+  max-height: min(92vh, 820px);
+}
+
+.reminder-form {
+  padding-bottom: 10px;
+}
+
+.reminder-mode-card {
+  gap: 12px;
+}
+
+.reminder-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.reminder-mode-option {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid rgba(220, 226, 239, 0.96);
+  border-radius: 18px;
+  padding: 13px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--text);
+  text-align: left;
+}
+
+.reminder-mode-option span {
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.reminder-mode-option-active {
+  border-color: rgba(49, 87, 225, 0.48);
+  background: linear-gradient(180deg, rgba(237, 241, 255, 0.98), rgba(255, 255, 255, 0.98));
+  box-shadow: 0 10px 24px rgba(49, 87, 225, 0.12);
+}
+
+.reminder-error-box {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(210, 60, 60, 0.22);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(255, 241, 243, 0.86);
+  color: var(--danger);
+  font-size: 12px;
 }
 
 .recurrence-helper {

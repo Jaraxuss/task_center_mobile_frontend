@@ -21,6 +21,7 @@ import type {
   FactFormState,
   KnowledgeMode,
   MaterialFormState,
+  ReminderFormState,
   TabKey,
   TaskActionType,
   TaskFormState,
@@ -219,6 +220,7 @@ export interface HandlerDeps {
   setFactSheetOverTask: (v: boolean) => void;
   setFactCustomerPickerOpen: (v: boolean) => void;
   setFactProjectPickerOpen: (v: boolean) => void;
+  setReminderDraft: (draft: ReminderFormState | null) => void;
   currentFact: Fact | null;
   setCurrentFact: (f: Fact | null) => void;
 
@@ -249,7 +251,7 @@ export function useAppHandlers(deps: HandlerDeps) {
     materialDraft, setMaterialDraft,
     factDraft, setFactDraft,
     factStatusFilter,
-    setFactSheetOverTask, setFactCustomerPickerOpen, setFactProjectPickerOpen,
+    setFactSheetOverTask, setFactCustomerPickerOpen, setFactProjectPickerOpen, setReminderDraft,
     currentFact, setCurrentFact,
     boardPreferenceData, knowledgePrefData,
     boardProjectGroups, filteredOverviewCustomers,
@@ -485,6 +487,46 @@ export function useAppHandlers(deps: HandlerDeps) {
     }
   }
 
+  async function submitReminderSettings(draft: ReminderFormState) {
+    if (!selectedTask) return;
+    const remindAt = toIsoOrNull(draft.remind_at);
+    if (!remindAt) {
+      setToast({ text: '请选择有效提醒时间', tone: 'danger' });
+      return;
+    }
+    if (draft.delivery_mode === 'openclaw_cron_agent' && !draft.receive_id.trim()) {
+      setToast({ text: 'AI 提醒需要填写接收 ID', tone: 'danger' });
+      return;
+    }
+    if (draft.delivery_mode === 'openclaw_cron_agent' && !draft.ai_prompt.trim()) {
+      setToast({ text: 'AI 提醒需要填写 Prompt', tone: 'danger' });
+      return;
+    }
+    const payload = {
+      remind_at: remindAt,
+      channel: 'feishu',
+      note: draft.note.trim() || null,
+      delivery_mode: draft.delivery_mode,
+      receive_id: draft.receive_id.trim() || null,
+      receive_id_type: draft.receive_id_type,
+      ai_prompt: draft.delivery_mode === 'openclaw_cron_agent' ? draft.ai_prompt.trim() : null,
+    };
+    setActionBusy('reminder');
+    try {
+      const updated = draft.id
+        ? await api.updateReminder(selectedTask.id, draft.id, payload)
+        : await api.createReminder(selectedTask.id, payload);
+      patchTaskEverywhere(updated);
+      setReminderDraft(null);
+      setToast({ text: draft.delivery_mode === 'openclaw_cron_agent' ? 'AI 提醒已安排' : '提醒已保存', tone: 'success' });
+      await refreshVisibleData();
+    } catch (error) {
+      setToast({ text: error instanceof Error ? error.message : '提醒保存失败', tone: 'danger' });
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
   async function submitMaterialEditor() {
     if (!materialDraft) return;
     const title = materialDraft.title.trim();
@@ -711,6 +753,7 @@ export function useAppHandlers(deps: HandlerDeps) {
     openTask,
     runTaskAction,
     submitEditor,
+    submitReminderSettings,
     submitMaterialEditor,
     updateMaterialStatus,
     archiveMaterial,
