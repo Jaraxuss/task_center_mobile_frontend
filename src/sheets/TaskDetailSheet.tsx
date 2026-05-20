@@ -1,4 +1,4 @@
-import { getTaskScheduleAt } from '../lib';
+import { getPrimaryReminder, getTaskScheduleAt } from '../lib';
 import type { TaskActionType } from '../lib';
 import { CompactFactRow, DetailItem, MaterialRow, StatusPill } from '../components';
 import { Customer, CustomerMaterial, Fact, Task } from '../types';
@@ -53,7 +53,7 @@ export function TaskDetailSheet({
   onOpenFact: (factId: number) => void;
 }) {
   const latestFollowupResult = getLatestFollowupResult(task);
-  const primaryReminder = [...(task.reminders || [])].filter((reminder) => reminder.status !== 'canceled').sort((a, b) => String(a.remind_at).localeCompare(String(b.remind_at)))[0] || null;
+  const primaryReminder = getPrimaryReminder(task);
   const reminderMode = primaryReminder?.delivery_mode || 'feishu_card_v2';
 
   return (

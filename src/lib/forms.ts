@@ -68,9 +68,14 @@ export function makeTaskFormState(task?: Task | null): TaskFormState {
 }
 
 export function getPrimaryReminder(task?: Task | null): Reminder | null {
-  const reminders = [...(task?.reminders || [])].filter((reminder) => reminder.status !== 'canceled');
+  const reminders = [...(task?.reminders || [])].filter((reminder) => reminder.status !== 'canceled' && reminder.status !== 'disabled');
   if (!reminders.length) return null;
-  return reminders.sort((a, b) => String(a.remind_at).localeCompare(String(b.remind_at)))[0];
+  const now = Date.now();
+  const upcoming = reminders
+    .filter((reminder) => reminder.status === 'scheduled' && new Date(reminder.remind_at).getTime() >= now)
+    .sort((a, b) => new Date(a.remind_at).getTime() - new Date(b.remind_at).getTime());
+  if (upcoming.length) return upcoming[0];
+  return reminders.sort((a, b) => new Date(b.remind_at).getTime() - new Date(a.remind_at).getTime())[0];
 }
 
 export function buildDefaultAiPrompt(task: Task, remindAt: string): string {
