@@ -155,14 +155,11 @@ export function TaskDetailSheet({
               <button type="button" className="action-button" onClick={onEdit} disabled={busyAction !== null}>
                 编辑
               </button>
-              <button type="button" className="action-button" onClick={onReminderSettings} disabled={busyAction !== null}>
-                通知方式
-              </button>
-              <button type="button" className="action-button action-danger action-button-span" onClick={() => onAction('cancel')} disabled={busyAction !== null}>
-                {busyAction === 'cancel' ? '处理中…' : '取消'}
+              <button type="button" className="action-button action-danger" onClick={() => onAction('cancel')} disabled={busyAction !== null}>
+                {busyAction === 'cancel' ? '处理中…' : '取消任务'}
               </button>
             </div>
-            <div className="helper-text">改时间会同步默认提醒时间；通知方式只配置 V2 / V1 / AI、接收人和备注。</div>
+            <div className="helper-text">改时间会同步默认提醒时间；通知方式在上方提醒卡片里配置。</div>
           </div>
         </div>
       </div>

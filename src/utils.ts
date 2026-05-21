@@ -241,7 +241,7 @@ export function describeRecurrence(recurrence?: TaskRecurrence | null) {
   if (unit === 'daily') return interval === 1 ? '每天' : `每 ${interval} 天`;
   if (unit === 'weekly') {
     const days = normalizeWeekdays(recurrence.days_of_week);
-    const dayText = days.length ? days.map((day) => weekdayLabelMap[day]).join('、') : '每周';
+    const dayText = days.length ? `每${days.map((day) => weekdayLabelMap[day]).join('、')}` : '每周';
     return interval === 1 ? dayText : `每 ${interval} 周 · ${dayText}`;
   }
   if (unit === 'monthly') {

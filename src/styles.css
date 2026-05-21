@@ -1279,11 +1279,23 @@ button {
   color: var(--brand);
 }
 
-.editor-submit-bar {
+.editor-submit-bar,
+.sheet-submit-bar {
   position: sticky;
   bottom: 0;
   padding: 6px 16px calc(env(safe-area-inset-bottom) + 4px);
   background: linear-gradient(180deg, rgba(243, 245, 251, 0), rgba(243, 245, 251, 0.96) 24%, rgba(243, 245, 251, 0.99));
+}
+
+.sheet-submit-bar {
+  display: flex;
+  justify-content: center;
+}
+
+.sheet-submit-bar .primary-submit,
+.editor-submit-button {
+  width: 100%;
+  max-width: 448px;
 }
 
 .editor-submit-button {
@@ -1332,6 +1344,22 @@ button {
 .editor-field textarea {
   resize: vertical;
   min-height: 110px;
+}
+
+.time-shortcut-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.time-shortcut-button {
+  border: 1px solid rgba(49, 87, 225, 0.18);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: rgba(237, 241, 255, 0.9);
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .inline-badge {
@@ -2370,8 +2398,15 @@ button {
   color: #ffbac3;
 }
 
-:root[data-theme='dark'] .editor-submit-bar {
+:root[data-theme='dark'] .editor-submit-bar,
+:root[data-theme='dark'] .sheet-submit-bar {
   background: linear-gradient(180deg, rgba(15, 20, 32, 0), rgba(15, 20, 32, 0.94) 24%, rgba(15, 20, 32, 0.99));
+}
+
+:root[data-theme='dark'] .time-shortcut-button {
+  background: rgba(111, 141, 255, 0.14);
+  border-color: rgba(111, 141, 255, 0.24);
+  color: var(--brand-strong);
 }
 
 :root[data-theme='dark'] .board-mode-toolbar-divider {

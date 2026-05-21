@@ -110,9 +110,11 @@ export function ReminderSettingsSheet({
           )}
         </div>
 
-        <button type="button" className="primary-submit" onClick={onSubmit} disabled={busy}>
-          {busy ? '保存中…' : draft.id ? '保存通知方式' : '创建通知方式'}
-        </button>
+        <div className="sheet-submit-bar">
+          <button type="button" className="primary-submit" onClick={onSubmit} disabled={busy}>
+            {busy ? '保存中…' : draft.id ? '保存通知方式' : '创建通知方式'}
+          </button>
+        </div>
       </div>
     </div>
   );
