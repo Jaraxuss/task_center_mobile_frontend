@@ -10,6 +10,7 @@ import {
   makeFactFormState,
   makeMaterialFormState,
   makeOptimisticTask,
+  getPrimaryReminder,
   parseRouteState,
   regroupBoardStatusGroups,
   regroupPlanGroups,
@@ -418,7 +419,20 @@ export function useAppHandlers(deps: HandlerDeps) {
     try {
       let updated: Task;
       if (type === 'complete') updated = await api.completeTask(selectedTask.id, { note: payload?.reason || undefined });
-      else if (type === 'reschedule') updated = await api.updateTask(selectedTask.id, { due_at: payload?.due_at ?? null });
+      else if (type === 'reschedule') {
+        updated = await api.updateTask(selectedTask.id, { due_at: payload?.due_at ?? null });
+        const dueAt = payload?.due_at ?? null;
+        if (dueAt) {
+          const primaryReminder = getPrimaryReminder(selectedTask);
+          try {
+            updated = primaryReminder
+              ? await api.updateReminder(updated.id, primaryReminder.id, { remind_at: dueAt })
+              : await api.createReminder(updated.id, { remind_at: dueAt, channel: 'feishu', delivery_mode: 'feishu_card_v2' });
+          } catch (error) {
+            setToast({ text: error instanceof Error ? `任务时间已更新，但通知时间同步失败：${error.message}` : '任务时间已更新，但通知时间同步失败', tone: 'danger' });
+          }
+        }
+      }
       else if (type === 'defer') updated = await api.deferTask(selectedTask.id, { deferred_to: payload?.deferred_to || '', due_at: payload?.due_at || undefined, reason: payload?.reason });
       else updated = await api.cancelTask(selectedTask.id, payload?.reason || undefined);
 

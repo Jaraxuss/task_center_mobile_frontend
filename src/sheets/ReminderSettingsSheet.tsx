@@ -37,7 +37,7 @@ export function ReminderSettingsSheet({
           <button type="button" className="ghost-button" onClick={onClose}>
             返回
           </button>
-          <strong>提醒设置</strong>
+          <strong>通知方式</strong>
           <span className="muted-text">#{task.id}</span>
         </div>
 
@@ -45,9 +45,9 @@ export function ReminderSettingsSheet({
           <section className="editor-card reminder-mode-card">
             <div className="editor-card-head">
               <div>
-                <div className="editor-label">提醒方式</div>
+                <div className="editor-label">通知方式</div>
                 <strong className="editor-card-title">{deliveryModes.find((mode) => mode.value === draft.delivery_mode)?.title}</strong>
-                <p className="editor-card-note">普通提醒由 TaskCenter 直接发送；只有需要模型处理时才选择 AI 提醒。</p>
+                <p className="editor-card-note">提醒时间跟随任务时间。改时间请回到任务详情页使用「改时间」。</p>
               </div>
             </div>
             <div className="reminder-mode-grid">
@@ -71,10 +71,11 @@ export function ReminderSettingsSheet({
             </div>
           </section>
 
-          <label>
+          <div className="reminder-follow-time-box">
             <span>提醒时间</span>
-            <input type="datetime-local" value={draft.remind_at} onChange={(event) => onChange({ ...draft, remind_at: event.target.value })} />
-          </label>
+            <strong>{draft.remind_at || '未设置任务时间'}</strong>
+            <small>跟随任务时间；如需调整，请在任务详情页点击「改时间」。</small>
+          </div>
 
           <label>
             <span>发送备注（可选）</span>
@@ -110,7 +111,7 @@ export function ReminderSettingsSheet({
         </div>
 
         <button type="button" className="primary-submit" onClick={onSubmit} disabled={busy}>
-          {busy ? '保存中…' : draft.id ? '保存提醒' : '创建提醒'}
+          {busy ? '保存中…' : draft.id ? '保存通知方式' : '创建通知方式'}
         </button>
       </div>
     </div>

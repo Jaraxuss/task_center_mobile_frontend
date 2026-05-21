@@ -97,9 +97,9 @@ export function TaskDetailSheet({
             <button type="button" className="reminder-summary-button" onClick={onReminderSettings}>
               <div>
                 <strong>{primaryReminder ? formatDateTime(primaryReminder.remind_at) : '未设置提醒'}</strong>
-                <span>{primaryReminder ? `${reminderModeLabel[reminderMode] || reminderMode} · ${primaryReminder.status}` : '点击设置飞书卡片或 AI 提醒'}</span>
+                <span>{primaryReminder ? `${reminderModeLabel[reminderMode] || reminderMode} · 跟随任务时间` : '点击设置通知方式，默认跟随任务时间'}</span>
               </div>
-              <span className="reminder-summary-arrow">设置</span>
+              <span className="reminder-summary-arrow">通知方式</span>
             </button>
           </div>
 
@@ -149,20 +149,20 @@ export function TaskDetailSheet({
               <button type="button" className="action-button action-primary" onClick={() => onAction('complete')} disabled={busyAction !== null}>
                 {busyAction === 'complete' ? '处理中…' : '完成'}
               </button>
-              <button type="button" className="action-button" onClick={onEdit} disabled={busyAction !== null}>
-                编辑
-              </button>
               <button type="button" className="action-button" onClick={() => onAction('reschedule')} disabled={busyAction !== null}>
                 {busyAction === 'reschedule' ? '处理中…' : '改时间'}
               </button>
-              <button type="button" className="action-button" onClick={() => onAction('defer')} disabled={busyAction !== null}>
-                {busyAction === 'defer' ? '处理中…' : '延期'}
+              <button type="button" className="action-button" onClick={onEdit} disabled={busyAction !== null}>
+                编辑
+              </button>
+              <button type="button" className="action-button" onClick={onReminderSettings} disabled={busyAction !== null}>
+                通知方式
               </button>
               <button type="button" className="action-button action-danger action-button-span" onClick={() => onAction('cancel')} disabled={busyAction !== null}>
                 {busyAction === 'cancel' ? '处理中…' : '取消'}
               </button>
             </div>
-            <div className="helper-text">改时间 / 延期 / 取消都换成了移动端 sheet 交互，不再弹 prompt 了。</div>
+            <div className="helper-text">改时间会同步默认提醒时间；通知方式只配置 V2 / V1 / AI、接收人和备注。</div>
           </div>
         </div>
       </div>

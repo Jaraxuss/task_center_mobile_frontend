@@ -1577,6 +1577,26 @@ button {
   font-size: 12px;
 }
 
+.reminder-follow-time-box {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border: 1px dashed rgba(150, 162, 184, 0.42);
+  border-radius: 16px;
+  padding: 12px;
+  background: rgba(248, 250, 255, 0.82);
+}
+
+.reminder-follow-time-box span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reminder-follow-time-box small {
+  color: var(--muted-strong);
+  line-height: 1.45;
+}
+
 .recurrence-helper {
   padding-top: 10px;
 }
