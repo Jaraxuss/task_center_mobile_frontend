@@ -1,3 +1,6 @@
+import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { truncateText } from '../lib';
 import type { MaterialFormState } from '../lib';
 import { FactStatusPill, materialStatusLabelMap } from '../components';
@@ -42,6 +45,7 @@ export function MaterialEditorSheet({
   onOpenFact: (factId: number) => void;
   busy: boolean;
 }) {
+  const [mdMode, setMdMode] = useState<'preview' | 'edit'>('preview');
   const period = batch?.period_start && batch?.period_end
     ? `${(batch.period_start || '').slice(0, 10)} ~ ${(batch.period_end || '').slice(0, 10)}`
     : (material?.period_start && material?.period_end
@@ -106,10 +110,38 @@ export function MaterialEditorSheet({
           </section>
 
           <section className="editor-card editor-card-soft">
-            <label className="editor-field editor-field-description">
-              <span className="editor-label">原始事实 Markdown</span>
-              <textarea rows={16} value={draft.raw_facts_markdown} onChange={(event) => onChange({ ...draft, raw_facts_markdown: event.target.value })} placeholder="按 fact_date 排序后的原文拼接。审核时只做错别字 / 漏写修正。" />
-            </label>
+            <div className="editor-field editor-field-description">
+              <div className="editor-label-row">
+                <span className="editor-label">原始事实 Markdown</span>
+                <div className="markdown-mode-toggle">
+                  <button
+                    type="button"
+                    className={mdMode === 'preview' ? 'toggle-btn toggle-btn-active' : 'toggle-btn'}
+                    onClick={() => setMdMode('preview')}
+                  >
+                    预览
+                  </button>
+                  <button
+                    type="button"
+                    className={mdMode === 'edit' ? 'toggle-btn toggle-btn-active' : 'toggle-btn'}
+                    onClick={() => setMdMode('edit')}
+                  >
+                    编辑
+                  </button>
+                </div>
+              </div>
+              {mdMode === 'edit' ? (
+                <textarea rows={16} value={draft.raw_facts_markdown} onChange={(event) => onChange({ ...draft, raw_facts_markdown: event.target.value })} placeholder="按 fact_date 排序后的原文拼接。审核时只做错别字 / 漏写修正。" />
+              ) : (
+                <div className="markdown-body">
+                  {draft.raw_facts_markdown ? (
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.raw_facts_markdown}</ReactMarkdown>
+                  ) : (
+                    <p className="markdown-empty">暂无正文</p>
+                  )}
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="editor-card editor-card-soft material-facts-panel">
