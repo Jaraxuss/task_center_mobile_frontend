@@ -82,7 +82,7 @@ export function buildDefaultAiPrompt(task: Task, remindAt: string): string {
   const lines = [
     '你是 TaskCenter 定时提醒助手。',
     '',
-    '请在到点后发送一条简洁中文提醒给南哥。不要扩写，不要引入额外事实。',
+    '请在到点后发送一条简洁中文提醒给 task owner。不要扩写，不要引入额外事实。',
     '',
     '任务信息：',
     `- task_center #${task.id}`,
